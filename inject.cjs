@@ -152,11 +152,12 @@ async function main() {
       // 旁路：直接用指定 CSS 文件，跳过随机选图
       css = fs.readFileSync(process.env.ZCODE_WP_CSS, "utf8");
     } else {
-      var wallpapersDir = path.join(__dirname, "wallpapers");
+      var wallpapersDir = path.join(__dirname, "wallpapers-thumb");
       var images = listWallpapers(wallpapersDir);
       if (images.length === 0) {
-        console.log("[wallpaper] wallpapers/ 为空，不注入壁纸（ZCode 保持默认外观）。");
-        console.log("[wallpaper] 把图片放进 " + wallpapersDir + " 后重跑 inject-only.bat。");
+        console.log("[wallpaper] wallpapers-thumb/ 为空，不注入壁纸（ZCode 保持默认外观）。");
+        console.log("[wallpaper] 双击 resize.bat 生成缩图后再启动。");
+        console.log("[wallpaper] （把原图放进 wallpapers/，resize 会自动缩到 wallpapers-thumb/）");
         process.exit(0);
       }
       var chosen = pickRandom(images);
