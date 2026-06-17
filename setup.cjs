@@ -1,6 +1,6 @@
 // One-click setup for zcode-wallpaper on a new machine.
-// Checks environment, configures the local wallpaper path (via a placeholder
-// in wallpaper.css), and installs dependencies. Idempotent: safe to re-run.
+// Checks environment, ensures the wallpapers/ directory, and installs
+// dependencies. Idempotent: safe to re-run. Does NOT touch wallpaper.css.
 //
 // Usage: node setup.cjs   (or double-click setup.bat)
 
@@ -8,7 +8,6 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const PLACEHOLDER = "__WALLPAPER__";
 const MIN_NODE_MAJOR = 18;
 
 // Parse "v24.16.0" -> 24. Throws on malformed input.
@@ -21,26 +20,6 @@ function parseNodeVersion(v) {
 // True if the major version meets the minimum.
 function isNodeVersionOk(major) {
   return major >= MIN_NODE_MAJOR;
-}
-
-// Convert a Windows absolute path to a file:/// URL.
-// "C:\\a\\b\\wallpapers" -> "file:///C:/a/b/wallpapers"
-// Rule: prefix "file:///", then replace all backslashes with forward slashes.
-function toFileUrl(p) {
-  return "file:///" + String(p).replace(/\\/g, "/");
-}
-
-// True if css still contains the __WALLPAPER__ placeholder.
-function hasPlaceholder(css) {
-  return css.indexOf(PLACEHOLDER) !== -1;
-}
-
-// Replace all __WALLPAPER__ occurrences in css with fileUrl.
-// If the placeholder is already gone (already configured / user edited),
-// returns css unchanged (idempotent + preserves user customizations).
-function replacePlaceholder(css, fileUrl) {
-  if (!hasPlaceholder(css)) return css;
-  return css.split(PLACEHOLDER).join(fileUrl);
 }
 
 // Detect ZCode.exe location. Tries, in order:
@@ -126,46 +105,24 @@ function main() {
   }
   console.log("[wallpaper]   " + wallpapersDir);
 
-  // --- Step 4: replace placeholder in wallpaper.css (idempotent) ---
-  console.log("[wallpaper] Step 4: configure wallpaper path in wallpaper.css");
-  var cssPath = path.join(__dirname, "wallpaper.css");
-  var css;
-  try {
-    css = fs.readFileSync(cssPath, "utf8");
-  } catch (e) {
-    fail("cannot read wallpaper.css: " + e.message);
-  }
-  if (!hasPlaceholder(css)) {
-    console.log("[wallpaper]   wallpaper.css path already configured, skip");
-  } else {
-    var fileUrl = toFileUrl(wallpapersDir);
-    css = replacePlaceholder(css, fileUrl);
-    try {
-      fs.writeFileSync(cssPath, css, "utf8");
-    } catch (e) {
-      fail("cannot write wallpaper.css: " + e.message);
-    }
-    console.log("[wallpaper]   Configured -> " + fileUrl + "/wallpaper.svg");
-  }
-
-  // --- Step 5: npm install ---
-  console.log("[wallpaper] Step 5: install dependencies (npm install)");
+  // --- Step 4: npm install ---
+  console.log("[wallpaper] Step 4: install dependencies (npm install)");
   try {
     execSync("npm install", { cwd: __dirname, stdio: "inherit" });
   } catch (e) {
     fail("npm install failed. Check your network / npm mirror.");
   }
 
-  // --- Step 6: summary ---
+  // --- Step 5: summary ---
   console.log("[wallpaper] ========================================");
   console.log("[wallpaper]  初始化完成！");
   console.log("[wallpaper]  - Node: " + process.version + " ✓");
   console.log("[wallpaper]  - ZCode: " + (zcodePath ? zcodePath + " ✓" : "⚠ 未找到"));
   console.log("[wallpaper]  - 壁纸目录: " + wallpapersDir + " ✓");
-  console.log("[wallpaper]  - 壁纸路径已配置 -> wallpaper.svg");
+  console.log("[wallpaper]  - 壁纸目录就绪，inject 时从 wallpapers/ 随机选图");
   console.log("[wallpaper]  - 依赖已安装 (ws)");
   console.log("[wallpaper]  下一步:");
-  console.log("[wallpaper]   1. 想换图: 把图放进 wallpapers/, 改 wallpaper.css 的文件名");
+  console.log("[wallpaper]   1. 想换图: 把图放进 wallpapers/（启动时随机选一张）");
   console.log("[wallpaper]   2. 完全退出 ZCode -> 双击 start-zcode.bat");
   console.log("[wallpaper] ========================================");
 }
@@ -174,9 +131,6 @@ function main() {
 module.exports = {
   parseNodeVersion,
   isNodeVersionOk,
-  toFileUrl,
-  hasPlaceholder,
-  replacePlaceholder,
   detectZcode,
 };
 
