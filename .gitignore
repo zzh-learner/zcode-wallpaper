@@ -7,13 +7,12 @@ zcode-launch.log
 verify-*.log
 
 # Your private wallpaper images — DO NOT commit personal photos.
-# Keep wallpaper.svg (the bundled test image). Add your own images here
-# or name them with a prefix to ignore:
+# Add your own images to wallpapers/ (ignored below) or name them with
+# a prefix to ignore:
 *.jpg
 *.jpeg
 *.png
 *.bmp
-!wallpaper.svg
 !EffectPreview.png
 
 # Everything under wallpapers/ is private (any format). Ignore the
