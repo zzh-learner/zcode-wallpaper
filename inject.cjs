@@ -148,9 +148,28 @@ function buildExpression(mode, css) {
 async function main() {
   let css = "";
   if (MODE === "inject") {
-    css = process.env.ZCODE_WP_CSS
-      ? fs.readFileSync(process.env.ZCODE_WP_CSS, "utf8")
-      : fs.readFileSync(path.join(__dirname, "wallpaper.css"), "utf8");
+    if (process.env.ZCODE_WP_CSS) {
+      // 旁路：直接用指定 CSS 文件，跳过随机选图
+      css = fs.readFileSync(process.env.ZCODE_WP_CSS, "utf8");
+    } else {
+      var wallpapersDir = path.join(__dirname, "wallpapers");
+      var images = listWallpapers(wallpapersDir);
+      if (images.length === 0) {
+        console.log("[wallpaper] wallpapers/ 为空，不注入壁纸（ZCode 保持默认外观）。");
+        console.log("[wallpaper] 把图片放进 " + wallpapersDir + " 后重跑 inject-only.bat。");
+        process.exit(0);
+      }
+      var chosen = pickRandom(images);
+      var fileUrl = toFileUrl(path.join(wallpapersDir, chosen));
+      css = fs.readFileSync(path.join(__dirname, "wallpaper.css"), "utf8");
+      css =
+        css +
+        "\n/* 本次启动随机选中的壁纸 */\n" +
+        'body { background-image: url("' +
+        fileUrl +
+        '") !important; }\n';
+      console.log("[wallpaper] 选中壁纸: " + chosen + " （共 " + images.length + " 张可选）");
+    }
   }
 
   let targets;
