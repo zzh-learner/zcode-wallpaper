@@ -1,0 +1,75 @@
+/* ============================================================
+   ZCode 壁纸 CSS —— 由 CDP 注入，不修改 app.asar
+   ============================================================
+   原理：
+   1. 背景图挂在 body 上（铺满、不滚动）
+   2. 把 UI 主背景变量改成半透明，让壁纸透出来
+   3. 用 !important 压过应用样式
+
+   调参说明（下面每处都标了 [调这里]）：
+   - [图]  把 url(...) 换成你的图。本机路径用 file:/// 形式
+   - [透明度]  opacity:0.85 → 数字越小壁纸越明显，但字也越难看清
+   - [模糊]  blur(0px) → 想要毛玻璃效果就调大，如 blur(8px)
+   ============================================================ */
+
+/* 1) 背景层：图挂在 body 上。
+      [图] 把下面 url() 换成你自己的图。规则：
+        - 开头 file:///，盘符后用正斜杠 /
+        - 纯英文路径，别用中文/空格（file:// 加载中文路径可能失败）
+      默认用自带的测试图 wallpaper.svg，换成你的图即可。 */
+body {
+  background-image: url("wallpaper.svg") !important; /* [图] 改成你自己的，如 url("file:///D:/Photos/bg.jpg") */
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* 2) 让两个主题的主背景变半透明，透出壁纸。
+      原始 --color-background 在 .theme-zai-dark / .theme-zai-light 上定义，
+      这里用 rgba 覆盖它（最后一位是 alpha，越小越透明）。 */
+.theme-zai-dark {
+  --color-background: rgba(18, 18, 22, 0.82) !important;      /* [透明度] dark 主题 */
+}
+.theme-zai-light {
+  --color-background: rgba(245, 245, 247, 0.82) !important;  /* [透明度] light 主题 */
+}
+
+/* 3) 备用变量也覆盖，避免边角漏出实色 */
+.theme-zai-dark {
+  --color-background-alt: rgba(24, 24, 28, 0.82) !important;
+}
+.theme-zai-light {
+  --color-background-alt: rgba(250, 250, 252, 0.82) !important;
+}
+
+/* 3b) 【关键】Windows 专用背景变量。ZCode 主框架 div 用的是
+      bg-background-win-alt 类（对应 --color-background-win-alt），
+      不是 --color-background。必须把这个也改透明，否则壁纸被
+      这个 div 的实色背景（#ececee / dark 实色）整个盖住。 */
+.theme-zai-dark {
+  --color-background-win-alt: rgba(18, 18, 22, 0.82) !important;   /* [透明度] dark */
+}
+.theme-zai-light {
+  --color-background-win-alt: rgba(245, 245, 247, 0.82) !important; /* [透明度] light */
+}
+
+/* 3c) 兜底：直接把所有背景相关的 Tailwind 工具类设成透明，
+      防止有元素用了内联色或其它变量漏出实色。 */
+.bg-background,
+.bg-background-alt,
+.bg-background-win-alt,
+.bg-surface {
+  background-color: transparent !important;
+}
+
+/* 4) 想要毛玻璃就把下面注释去掉，blur 越大越糊 */
+/*
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  backdrop-filter: blur(8px);  !* [模糊] *!
+  z-index: -1;
+}
+*/

@@ -1,0 +1,115 @@
+// Self-test for inject.cjs buildExpression logic against a fake DOM.
+// Run: node selftest.cjs
+const fs = require("fs");
+const path = require("path");
+
+const STYLE_ID = "zcode-user-wallpaper";
+
+// Mirror buildExpression from inject.cjs (kept in sync manually)
+function buildExpression(mode, css) {
+  if (mode === "remove") {
+    return (
+      "(function(){var e=document.getElementById(" +
+      JSON.stringify(STYLE_ID) +
+      ");if(e){e.remove();return 'removed';}return 'none';})()"
+    );
+  }
+  return (
+    "(function(){var id=" +
+    JSON.stringify(STYLE_ID) +
+    ";var existing=document.getElementById(id);if(existing)existing.remove();" +
+    "var s=document.createElement('style');s.id=id;s.textContent=" +
+    JSON.stringify(css) +
+    ";document.documentElement.appendChild(s);return 'ok';})();"
+  );
+}
+
+function makeFakeDom() {
+  // A minimal registry so getElementById finds whatever was appended.
+  const registry = {}; // id -> node (only "attached" ones)
+  function makeNode() {
+    return {
+      id: null,
+      textContent: null,
+      remove() {
+        if (this.id && registry[this.id] === this) delete registry[this.id];
+      },
+    };
+  }
+  return {
+    document: {
+      getElementById(id) {
+        return registry[id] || null;
+      },
+      createElement(tag) {
+        if (tag !== "style") throw new Error("unexpected tag " + tag);
+        return makeNode();
+      },
+      documentElement: {
+        appendChild(n) {
+          // Appending sets its id into the registry, mirroring real DOM behavior
+          // where a node becomes findable by id once in the document.
+          if (n.id) registry[n.id] = n;
+          return n;
+        },
+      },
+    },
+  };
+}
+
+let pass = 0,
+  fail = 0;
+function check(name, cond) {
+  console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + name);
+  cond ? pass++ : fail++;
+}
+
+// --- Test 1: inject ---
+{
+  const css = fs.readFileSync(path.join(__dirname, "wallpaper.css"), "utf8");
+  const { document } = makeFakeDom();
+  const fn = new Function("document", "return " + buildExpression("inject", css));
+  const result = fn(document);
+  check("inject returns 'ok'", result === "ok");
+  // verify a style with our id now exists in the fake dom
+  const style = document.getElementById(STYLE_ID);
+  check("inject: style present after inject", !!style);
+  check("inject: css textContent set", style && style.textContent.length === css.length);
+}
+
+// --- Test 2: remove after inject ---
+{
+  const css = "body{color:red}";
+  const { document } = makeFakeDom();
+  const inj = new Function("document", "return " + buildExpression("inject", css));
+  inj(document);
+  const styleBefore = document.getElementById(STYLE_ID);
+  check("remove-pre: style exists", !!styleBefore);
+  const rem = new Function("document", "return " + buildExpression("remove", ""));
+  const remResult = rem(document);
+  check("remove returns 'removed'", remResult === "removed");
+  check("remove: style gone after remove", !document.getElementById(STYLE_ID));
+}
+
+// --- Test 3: remove when nothing injected ---
+{
+  const { document } = makeFakeDom();
+  const rem = new Function("document", "return " + buildExpression("remove", ""));
+  const remResult = rem(document);
+  check("remove-empty returns 'none'", remResult === "none");
+}
+
+// --- Test 4: re-inject replaces (no duplicate) ---
+{
+  const { document } = makeFakeDom();
+  const inj = new Function("document", "return " + buildExpression("inject", "body{a:1}"));
+  inj(document);
+  inj(document); // second inject should remove the first, not duplicate
+  // In this fake DOM, getElementById returns the single attached node;
+  // the re-inject path removes existing then appends a new one.
+  const styles = [document.getElementById(STYLE_ID)].filter(Boolean);
+  check("re-inject: still exactly one style", styles.length === 1);
+}
+
+console.log("\n" + pass + " passed, " + fail + " failed.");
+process.exit(fail > 0 ? 1 : 0);

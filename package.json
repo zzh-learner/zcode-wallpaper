@@ -1,0 +1,23 @@
+{
+  "name": "zcode-wallpaper",
+  "version": "1.1.0",
+  "description": "Non-invasive wallpaper injection for the ZCode Electron app via CDP. No app.asar edits, survives upgrades.",
+  "license": "MIT",
+  "private": true,
+  "keywords": [
+    "zcode",
+    "electron",
+    "wallpaper",
+    "cdp",
+    "chrome-devtools-protocol",
+    "customization"
+  ],
+  "scripts": {
+    "inject": "node inject.cjs",
+    "remove": "node inject.cjs --remove",
+    "test": "node selftest.cjs && node cdp-mock-test.cjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
