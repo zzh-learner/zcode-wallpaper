@@ -14,6 +14,7 @@ verify-*.log
 *.png
 *.bmp
 !wallpaper.svg
+!EffectPreview.png
 
 # OS / editor cruft
 Thumbs.db

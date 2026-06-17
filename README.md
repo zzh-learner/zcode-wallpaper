@@ -4,6 +4,12 @@
 
 > ✅ 已端到端验证通过：CDP 连接成功、`<style>` 注入成功（`found:true, attached:true, stylesCount` 实测上涨）。
 
+## 效果预览
+
+![效果预览](EffectPreview.png)
+
+*上图：ZCode 客户端应用自定义壁纸后的实际效果。*
+
 ## 安装（每台新电脑都要做一次）
 
 需要 **Node.js**（带 `npx`/`npm`，v18+）和已安装的 ZCode 客户端。
