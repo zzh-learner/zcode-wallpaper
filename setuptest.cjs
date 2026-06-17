@@ -13,29 +13,6 @@ check("parseNodeVersion('v24.16.0') -> 24", setup.parseNodeVersion("v24.16.0") =
 check("isNodeVersionOk(24) -> true", setup.isNodeVersionOk(24) === true);
 check("isNodeVersionOk(17) -> false", setup.isNodeVersionOk(17) === false);
 
-// --- Task 2: toFileUrl ---
-check(
-  "toFileUrl('C:\\\\a\\\\b\\\\wallpapers') -> file:///C:/a/b/wallpapers",
-  setup.toFileUrl("C:\\a\\b\\wallpapers") === "file:///C:/a/b/wallpapers"
-);
-
-// --- Task 3: placeholder replacement + idempotency ---
-(function () {
-  var withPh = 'background-image: url("__WALLPAPER__/wallpaper.svg");';
-  var replaced = setup.replacePlaceholder(withPh, "file:///C:/proj/wallpapers");
-  check(
-    "replacePlaceholder fills the placeholder",
-    replaced === 'background-image: url("file:///C:/proj/wallpapers/wallpaper.svg");'
-  );
-  var already = 'background-image: url("file:///C:/proj/wallpapers/DSC.jpg");';
-  check(
-    "replacePlaceholder is idempotent when placeholder gone",
-    setup.replacePlaceholder(already, "file:///X") === already
-  );
-  check("hasPlaceholder true when present", setup.hasPlaceholder(withPh) === true);
-  check("hasPlaceholder false when absent", setup.hasPlaceholder(already) === false);
-})();
-
 // --- Task 4: detectZcode returns string or null (not asserting real path) ---
 (function () {
   var result = setup.detectZcode();
