@@ -17,6 +17,33 @@ const HOST = process.env.ZCODE_DEBUG_HOST || "127.0.0.1";
 const STYLE_ID = "zcode-user-wallpaper";
 let _callId = 0;
 
+const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"];
+
+// Convert a Windows absolute path to a file:/// URL.
+// "C:\\a\\b" -> "file:///C:/a/b"  (prefix + backslash -> slash)
+function toFileUrl(p) {
+  return "file:///" + String(p).replace(/\\/g, "/");
+}
+
+// List image filenames in dir (by extension). Returns [] if dir missing/empty.
+function listWallpapers(dir) {
+  try {
+    var entries = fs.readdirSync(dir);
+  } catch (e) {
+    return [];
+  }
+  return entries.filter(function (name) {
+    var ext = path.extname(name).toLowerCase();
+    return IMAGE_EXTS.indexOf(ext) !== -1;
+  });
+}
+
+// Pick a random item. Returns null for empty list.
+function pickRandom(items) {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)];
+}
+
 const MODE = process.argv.includes("--remove")
   ? "remove"
   : process.argv.includes("--list")
@@ -176,7 +203,11 @@ async function main() {
   process.exit(affected > 0 ? 0 : 1);
 }
 
-main().catch((e) => {
-  console.error("[wallpaper] FAILED:", e.message);
-  process.exit(1);
-});
+module.exports = { toFileUrl, listWallpapers, pickRandom };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error("[wallpaper] FAILED:", e.message);
+    process.exit(1);
+  });
+}
