@@ -23,8 +23,7 @@ cd zcode-wallpaper
 
 - 检查 Node.js 版本（≥18）
 - 探测 ZCode.exe 位置
-- 创建 `wallpapers/` 目录（放你自己的图）
-- 把壁纸路径自动配置好（指向自带的 wallpaper.svg）
+- 创建 `wallpapers/` 目录（放你自己的图，inject 时随机选一张）
 - 安装依赖（`npm install`）
 
 看到 `初始化完成！` 就可以双击 `start-zcode.bat` 启动了。
@@ -83,39 +82,19 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 
 > 以后开机用 ZCode，重复这两步即可。两个 bat 可各做桌面快捷方式。
 
-## 换自己的壁纸图
+## 壁纸图（随机轮播）
 
-> 💡 跑过 `setup.bat` 后，`wallpaper.css` 里的背景图已自动指向 `wallpapers/wallpaper.svg`。换图时只需把图放进 `wallpapers/`，把 CSS 里那一行的文件名 `wallpaper.svg` 改成你的图名即可，`file:///.../wallpapers/` 这段前缀不用动。
+壁纸由 `inject.cjs` **每次启动时从 `wallpapers/` 目录随机选一张**。你只需要把图放进 `wallpapers/`、删掉不想要的图，不用改任何 CSS 或路径。
 
-> ⚠️ **必须用 `file:///` 绝对路径**。ZCode 的页面运行在 `app.asar` 内部（URL 是 `.../app.asar/out/renderer/index.html`），写相对路径（如 `url("my.jpg")`）会被解析到 app.asar 里那个不存在的位置，**背景图加载失败、看不到效果**。这是最常踩的坑。
+- `wallpapers/` 有图 → 每次双击 `start-zcode.bat` 启动 ZCode 时，随机选一张注入（同一次会话内固定这一张，下次启动换一张）
+- `wallpapers/` 为空 → 不注入任何壁纸，ZCode 保持默认外观
 
-### 推荐做法：把图放进 `wallpapers/` 目录
+### 加图 / 换图
 
-项目根目录下有个专门的 **`wallpapers/`** 文件夹（已被 `.gitignore` 忽略，你的私人照片不会被提交）。换图三步：
+1. 把图复制进 `wallpapers/`（项目根目录下的子目录，已被 `.gitignore` 忽略，私人照片不会提交）
+2. 下次双击 `start-zcode.bat` 即自动从全部图里随机选一张
 
-1. 把图复制进 `wallpapers/`，例如：
-   ```
-   C:\Users\<你的用户名>\Documents\zcode-wallpaper\wallpapers\my-wallpaper.jpg
-   ```
-2. 打开 `wallpaper.css`，改第 1 处 **`[图]`**，用 `file:///` + 正斜杠的绝对路径：
-   ```css
-   background-image: url("file:///C:/Users/<你的用户名>/Documents/zcode-wallpaper/wallpapers/my-wallpaper.jpg") !important;
-   ```
-3. 双击 `inject-only.bat`，秒换图（不用重启 ZCode）
-
-### 路径怎么从 Windows 路径转成 `file:///` 形式
-
-规则很简单：
-- 开头加 `file:///`（三个斜杠）
-- 盘符后的反斜杠 `\` **全部换成正斜杠 `/`**
-- 路径里别用中文、别用空格（`file://` 加载中文/空格路径可能失败）
-
-```
-C:\Users\john\Pictures\bg.jpg
-→ file:///C:/Users/john/Pictures/bg.jpg
-```
-
-支持 `.jpg .jpeg .png .webp .gif .svg`。
+> ⚠️ 文件名请用**纯英文、别用中文/空格**（`file://` 加载中文路径可能失败）。支持 `.jpg .jpeg .png .webp .gif .svg`。
 
 ## 调透明度 / 毛玻璃
 
@@ -136,22 +115,21 @@ C:\Users\john\Pictures\bg.jpg
 | **`start-zcode.bat`** | 第 1 步：退出旧 ZCode → 带调试端口启动（ASCII，无乱码） |
 | **`inject-only.bat`** | 第 2 步：探测端口 → 注入壁纸（带友好诊断） |
 | `remove-wallpaper.bat` | 移除壁纸 |
-| **`setup.bat`** | 新电脑一键初始化（检查环境 + 配路径 + 装依赖） |
-| `setup.cjs` | setup.bat 的核心逻辑（6 步初始化） |
-| `setuptest.cjs` | setup 逻辑自检（9 项） |
-| `inject.cjs` | 核心注入器（CDP 客户端，含 ws://localhost→127.0.0.1 修复） |
-| `wallpaper.css` | 壁纸样式（图/透明度/模糊都在这调） |
-| `wallpapers/` | **放你自己的壁纸图**（`.gitignore` 已忽略，不会提交私人照片） |
-| `wallpaper.svg` | 自带测试图（紫蓝渐变 + 字样） |
-| `selftest.cjs` | 注入逻辑自检（8 项） |
+| **`setup.bat`** | 新电脑一键初始化（检查环境 + 准备 wallpapers 目录 + 装依赖） |
+| `setup.cjs` | setup.bat 的核心逻辑（5 步初始化） |
+| `setuptest.cjs` | setup 逻辑自检（4 项） |
+| `inject.cjs` | 核心注入器（CDP + 从 wallpapers/ 随机选图） |
+| `wallpaper.css` | 壁纸样式（透明度/模糊在这调；背景图由 inject 动态选） |
+| `wallpapers/` | **放你的壁纸图**（inject 启动时随机选一张；`.gitignore` 已忽略） |
+| `selftest.cjs` | 注入逻辑自检（13 项） |
 | `cdp-mock-test.cjs` | CDP 协议链路自检（mock，3 项） |
 
 ## 验证状态
 
-- [x] 注入逻辑自检 `node selftest.cjs` → **8/8 通过**
+- [x] 注入逻辑自检 `node selftest.cjs` → **13/13 通过**
 - [x] CDP 协议链路 `node cdp-mock-test.cjs` → **3/3 通过**
 - [x] 真实端到端：带端口启动 ZCode → inject.cjs 注入 → DOM 查询确认 `found:true, attached:true, stylesCount 15→17` → **通过**
-- [x] setup 逻辑自检 `node setuptest.cjs` → **9/9 通过**
+- [x] setup 逻辑自检 `node setuptest.cjs` → **4/4 通过**
 
 ## 故障排查
 
