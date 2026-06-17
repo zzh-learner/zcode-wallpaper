@@ -12,15 +12,26 @@
 
 ## 安装（每台新电脑都要做一次）
 
-需要 **Node.js**（带 `npx`/`npm`，v18+）和已安装的 ZCode 客户端。
+需要 **Node.js**（v18+）和已安装的 ZCode 客户端。
 
 ```bash
 git clone <你的仓库地址> zcode-wallpaper
 cd zcode-wallpaper
-npm install        # 装唯一的依赖 ws
 ```
 
-然后双击 `start-zcode.bat` 即可（首次会自动探测 ZCode.exe 位置）。详见下方「日常使用」。
+然后**双击 `setup.bat`**，它会自动完成：
+
+- 检查 Node.js 版本（≥18）
+- 探测 ZCode.exe 位置
+- 创建 `wallpapers/` 目录（放你自己的图）
+- 把壁纸路径自动配置好（指向自带的 wallpaper.svg）
+- 安装依赖（`npm install`）
+
+看到 `初始化完成！` 就可以双击 `start-zcode.bat` 启动了。
+
+> 💡 没有 Node.js？去 https://nodejs.org 下载 LTS 版（v18+）装上，再跑 setup.bat。setup.bat 会预检，没装会直接提示，不会报一堆错。
+
+> 🛠 不想用脚本？手动 `npm install` 也行，但 wallpaper.css 里的壁纸路径得自己改成 `file:///` 绝对路径（见下文）。
 
 ## 跨电脑使用
 
@@ -74,6 +85,8 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 
 ## 换自己的壁纸图
 
+> 💡 跑过 `setup.bat` 后，`wallpaper.css` 里的背景图已自动指向 `wallpapers/wallpaper.svg`。换图时只需把图放进 `wallpapers/`，把 CSS 里那一行的文件名 `wallpaper.svg` 改成你的图名即可，`file:///.../wallpapers/` 这段前缀不用动。
+
 > ⚠️ **必须用 `file:///` 绝对路径**。ZCode 的页面运行在 `app.asar` 内部（URL 是 `.../app.asar/out/renderer/index.html`），写相对路径（如 `url("my.jpg")`）会被解析到 app.asar 里那个不存在的位置，**背景图加载失败、看不到效果**。这是最常踩的坑。
 
 ### 推荐做法：把图放进 `wallpapers/` 目录
@@ -123,6 +136,9 @@ C:\Users\john\Pictures\bg.jpg
 | **`start-zcode.bat`** | 第 1 步：退出旧 ZCode → 带调试端口启动（ASCII，无乱码） |
 | **`inject-only.bat`** | 第 2 步：探测端口 → 注入壁纸（带友好诊断） |
 | `remove-wallpaper.bat` | 移除壁纸 |
+| **`setup.bat`** | 新电脑一键初始化（检查环境 + 配路径 + 装依赖） |
+| `setup.cjs` | setup.bat 的核心逻辑（6 步初始化） |
+| `setuptest.cjs` | setup 逻辑自检（9 项） |
 | `inject.cjs` | 核心注入器（CDP 客户端，含 ws://localhost→127.0.0.1 修复） |
 | `wallpaper.css` | 壁纸样式（图/透明度/模糊都在这调） |
 | `wallpapers/` | **放你自己的壁纸图**（`.gitignore` 已忽略，不会提交私人照片） |
@@ -135,6 +151,7 @@ C:\Users\john\Pictures\bg.jpg
 - [x] 注入逻辑自检 `node selftest.cjs` → **8/8 通过**
 - [x] CDP 协议链路 `node cdp-mock-test.cjs` → **3/3 通过**
 - [x] 真实端到端：带端口启动 ZCode → inject.cjs 注入 → DOM 查询确认 `found:true, attached:true, stylesCount 15→17` → **通过**
+- [x] setup 逻辑自检 `node setuptest.cjs` → **9/9 通过**
 
 ## 故障排查
 
