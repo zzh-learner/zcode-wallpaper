@@ -24,7 +24,7 @@ cd zcode-wallpaper
 - 检查 Node.js 版本（≥18）
 - 探测 ZCode.exe 位置
 - 创建 `wallpapers/` 目录（放你自己的图，inject 时随机选一张）
-- 安装依赖（`npm install`）
+- 安装依赖（`npm install`，含 `ws` 和 `sharp`）
 
 看到 `初始化完成！` 就可以双击 `start-zcode.bat` 启动了。
 
@@ -38,11 +38,11 @@ cd zcode-wallpaper
 
 - 所有路径都是**动态探测**的（ZCode.exe 位置、项目自身目录），不写死
 - 你的私有壁纸图被 `.gitignore` 排除，不会推到仓库
-- 唯一需要每台电脑各自做的事：`npm install`（装依赖）+ 把你自己的图放进 `wallpapers/` 并把 `file:///` 绝对路径填进 `wallpaper.css`
+- 唯一需要每台电脑各自做的事：`npm install`（装依赖）+ 把你自己的原图放进 `wallpapers/`，再双击 `resize.bat` 生成缩图
 
 **在新电脑上启动 ZCode 的流程和原来一样：**
 1. 完全退出 ZCode（窗口 + 托盘）→ 双击 `start-zcode.bat`
-2. 想换图：改 `wallpaper.css` 的 `[图]` → 双击 `inject-only.bat`
+2. 想换图：把图放进 `wallpapers/` → 双击 `resize.bat` → 双击 `inject-only.bat`
 
 > ⚠️ ZCode 装在非默认位置（如自定义盘符）时，`start-zcode.bat` 会自动尝试探测；若探测失败，按报错提示手动在 bat 里设 `ZCODE_EXE`。
 
@@ -84,10 +84,12 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 
 ## 壁纸图（随机轮播）
 
-壁纸由 `inject.cjs` **每次启动时从 `wallpapers/` 目录随机选一张**。你只需要把图放进 `wallpapers/`、删掉不想要的图，不用改任何 CSS 或路径。
+> ⚠️ **相机原图（几十 MB）必须先缩图**。inject 实际从 `wallpapers-thumb/`（缩图产物）读，不是 `wallpapers/` 原图。先双击 `resize.bat` 生成缩图，否则看不到壁纸。见下方「缩图」。
 
-- `wallpapers/` 有图 → 每次双击 `start-zcode.bat` 启动 ZCode 时，随机选一张注入（同一次会话内固定这一张，下次启动换一张）
-- `wallpapers/` 为空 → 不注入任何壁纸，ZCode 保持默认外观
+壁纸由 `inject.cjs` **每次启动时从 `wallpapers-thumb/` 目录随机选一张缩图**。你只需要把原图放进 `wallpapers/`、删掉不想要的图，不用改任何 CSS 或路径。
+
+- `wallpapers-thumb/` 有缩图 → 每次双击 `start-zcode.bat` 启动 ZCode 时，随机选一张注入（同一次会话内固定这一张，下次启动换一张）
+- `wallpapers-thumb/` 为空（没跑过 resize）→ 不注入任何壁纸，ZCode 保持默认外观
 
 ### 加图 / 换图
 
@@ -95,6 +97,21 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 2. 下次双击 `start-zcode.bat` 即自动从全部图里随机选一张
 
 > ⚠️ 文件名请用**纯英文、别用中文/空格**（`file://` 加载中文路径可能失败）。支持 `.jpg .jpeg .png .webp .gif .svg`。
+
+## 缩图（重要）
+
+相机原图（30-39MB）体积过大，Electron 的 `background-image` 加载会静默失败（看不到壁纸）。必须先缩图：
+
+1. 把原图放进 `wallpapers/`
+2. 双击 **`resize.bat`**：
+   - 扫描 `wallpapers/` 的栅格图（jpg/jpeg/png/webp）
+   - 缩到长边 ≤2560px、JPEG 质量 85
+   - 输出到 `wallpapers-thumb/`（与源同 basename，统一 `.jpg`）
+   - **增量**：已缩过且不比源旧的自动跳过，重复跑很快
+3. 看到"缩图完成"后，双击 `start-zcode.bat` 启动（inject 从 `wallpapers-thumb/` 随机选）
+
+> 💡 加新图流程：图放 `wallpapers/` → 双击 `resize.bat` → 双击 `start-zcode.bat`。
+> 缩图只对栅格图（jpg/png/webp）有效，svg/gif 不处理。
 
 ## 调透明度 / 毛玻璃
 
@@ -118,9 +135,12 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 | **`setup.bat`** | 新电脑一键初始化（检查环境 + 准备 wallpapers 目录 + 装依赖） |
 | `setup.cjs` | setup.bat 的核心逻辑（5 步初始化） |
 | `setuptest.cjs` | setup 逻辑自检（4 项） |
-| `inject.cjs` | 核心注入器（CDP + 从 wallpapers/ 随机选图） |
+| **`resize.bat`** | 把 wallpapers/ 原图批量缩图到 wallpapers-thumb/（增量，2560px/质量85） |
+| `resize.cjs` | resize.bat 的核心逻辑（sharp 缩图） |
+| `resizetest.cjs` | resize 逻辑自检（5 项） |
+| `inject.cjs` | 核心注入器（CDP + 从 wallpapers-thumb/ 随机选缩图） |
 | `wallpaper.css` | 壁纸样式（透明度/模糊在这调；背景图由 inject 动态选） |
-| `wallpapers/` | **放你的壁纸图**（inject 启动时随机选一张；`.gitignore` 已忽略） |
+| `wallpapers/` | **放你的原图**（resize 缩到 wallpapers-thumb/；`.gitignore` 已忽略） |
 | `selftest.cjs` | 注入逻辑自检（13 项） |
 | `cdp-mock-test.cjs` | CDP 协议链路自检（mock，3 项） |
 
@@ -130,6 +150,7 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 - [x] CDP 协议链路 `node cdp-mock-test.cjs` → **3/3 通过**
 - [x] 真实端到端：带端口启动 ZCode → inject.cjs 注入 → DOM 查询确认 `found:true, attached:true, stylesCount 15→17` → **通过**
 - [x] setup 逻辑自检 `node setuptest.cjs` → **4/4 通过**
+- [x] resize 逻辑自检 `node resizetest.cjs` → **5/5 通过**
 
 ## 故障排查
 
