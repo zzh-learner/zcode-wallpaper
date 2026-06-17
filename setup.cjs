@@ -84,8 +84,90 @@ function detectZcode() {
   return null;
 }
 
+function fail(msg) {
+  console.error("[wallpaper] " + msg);
+  process.exit(1);
+}
+
 function main() {
-  // Task 5 fills this in.
+  var zcodePath = null;
+
+  // --- Step 1: node version ---
+  console.log("[wallpaper] Step 1: check Node.js version");
+  var major = parseNodeVersion(process.version);
+  if (!isNodeVersionOk(major)) {
+    fail(
+      "Node.js v" +
+        major +
+        " is too old (need v" +
+        MIN_NODE_MAJOR +
+        "+). Download from https://nodejs.org"
+    );
+  }
+  console.log("[wallpaper]   Node " + process.version + " OK");
+
+  // --- Step 2: detect ZCode.exe (non-fatal) ---
+  console.log("[wallpaper] Step 2: locate ZCode.exe");
+  zcodePath = detectZcode();
+  if (zcodePath) {
+    console.log("[wallpaper]   Found: " + zcodePath);
+  } else {
+    console.log("[wallpaper]   WARN: ZCode.exe not found.");
+    console.log("[wallpaper]   Install ZCode first, or set ZCODE_EXE in start-zcode.bat later.");
+  }
+
+  // --- Step 3: ensure wallpapers/ exists ---
+  console.log("[wallpaper] Step 3: ensure wallpapers/ directory");
+  var wallpapersDir = path.join(__dirname, "wallpapers");
+  try {
+    fs.mkdirSync(wallpapersDir, { recursive: true });
+  } catch (e) {
+    fail("cannot create wallpapers/ directory: " + e.message);
+  }
+  console.log("[wallpaper]   " + wallpapersDir);
+
+  // --- Step 4: replace placeholder in wallpaper.css (idempotent) ---
+  console.log("[wallpaper] Step 4: configure wallpaper path in wallpaper.css");
+  var cssPath = path.join(__dirname, "wallpaper.css");
+  var css;
+  try {
+    css = fs.readFileSync(cssPath, "utf8");
+  } catch (e) {
+    fail("cannot read wallpaper.css: " + e.message);
+  }
+  if (!hasPlaceholder(css)) {
+    console.log("[wallpaper]   wallpaper.css path already configured, skip");
+  } else {
+    var fileUrl = toFileUrl(wallpapersDir);
+    css = replacePlaceholder(css, fileUrl);
+    try {
+      fs.writeFileSync(cssPath, css, "utf8");
+    } catch (e) {
+      fail("cannot write wallpaper.css: " + e.message);
+    }
+    console.log("[wallpaper]   Configured -> " + fileUrl + "/wallpaper.svg");
+  }
+
+  // --- Step 5: npm install ---
+  console.log("[wallpaper] Step 5: install dependencies (npm install)");
+  try {
+    execSync("npm install", { cwd: __dirname, stdio: "inherit" });
+  } catch (e) {
+    fail("npm install failed. Check your network / npm mirror.");
+  }
+
+  // --- Step 6: summary ---
+  console.log("[wallpaper] ========================================");
+  console.log("[wallpaper]  初始化完成！");
+  console.log("[wallpaper]  - Node: " + process.version + " ✓");
+  console.log("[wallpaper]  - ZCode: " + (zcodePath ? zcodePath + " ✓" : "⚠ 未找到"));
+  console.log("[wallpaper]  - 壁纸目录: " + wallpapersDir + " ✓");
+  console.log("[wallpaper]  - 壁纸路径已配置 -> wallpaper.svg");
+  console.log("[wallpaper]  - 依赖已安装 (ws)");
+  console.log("[wallpaper]  下一步:");
+  console.log("[wallpaper]   1. 想换图: 把图放进 wallpapers/, 改 wallpaper.css 的文件名");
+  console.log("[wallpaper]   2. 完全退出 ZCode -> 双击 start-zcode.bat");
+  console.log("[wallpaper] ========================================");
 }
 
 // Export pure functions for testing; run main() only when invoked directly.
