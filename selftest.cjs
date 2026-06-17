@@ -2,6 +2,7 @@
 // Run: node selftest.cjs
 const fs = require("fs");
 const path = require("path");
+const inject = require("./inject.cjs");
 
 const STYLE_ID = "zcode-user-wallpaper";
 
@@ -110,6 +111,42 @@ function check(name, cond) {
   const styles = [document.getElementById(STYLE_ID)].filter(Boolean);
   check("re-inject: still exactly one style", styles.length === 1);
 }
+
+// --- Test 5: inject.cjs pure functions (toFileUrl / listWallpapers / pickRandom) ---
+(function () {
+  // toFileUrl
+  check(
+    "toFileUrl('C:\\\\a\\\\b') -> file:///C:/a/b",
+    inject.toFileUrl("C:\\a\\b") === "file:///C:/a/b"
+  );
+
+  // listWallpapers: missing dir -> []
+  check("listWallpapers on missing dir -> []", inject.listWallpapers("Z:\\no\\such\\dir").length === 0);
+
+  // listWallpapers: real temp dir with mixed files
+  var os = require("os");
+  var tmp = fs.mkdtempSync(path.join(os.tmpdir(), "zcode-wp-test-"));
+  try {
+    fs.writeFileSync(path.join(tmp, "a.jpg"), "x");
+    fs.writeFileSync(path.join(tmp, "b.txt"), "x");
+    fs.writeFileSync(path.join(tmp, "c.png"), "x");
+    var imgs = inject.listWallpapers(tmp).sort();
+    check("listWallpapers filters by extension", JSON.stringify(imgs) === JSON.stringify(["a.jpg", "c.png"]));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
+  // pickRandom: empty -> null
+  check("pickRandom([]) -> null", inject.pickRandom([]) === null);
+
+  // pickRandom: result always in list
+  var pool = ["x.jpg", "y.jpg", "z.jpg"];
+  var ok = true;
+  for (var i = 0; i < 20; i++) {
+    if (pool.indexOf(inject.pickRandom(pool)) === -1) { ok = false; break; }
+  }
+  check("pickRandom returns an item from the list", ok);
+})();
 
 console.log("\n" + pass + " passed, " + fail + " failed.");
 process.exit(fail > 0 ? 1 : 0);
