@@ -36,5 +36,11 @@ check(
   check("hasPlaceholder false when absent", setup.hasPlaceholder(already) === false);
 })();
 
+// --- Task 4: detectZcode returns string or null (not asserting real path) ---
+(function () {
+  var result = setup.detectZcode();
+  check("detectZcode returns string or null", result === null || typeof result === "string");
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed.");
 process.exit(fail > 0 ? 1 : 0);

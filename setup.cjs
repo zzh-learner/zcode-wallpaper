@@ -43,6 +43,47 @@ function replacePlaceholder(css, fileUrl) {
   return css.split(PLACEHOLDER).join(fileUrl);
 }
 
+// Detect ZCode.exe location. Tries, in order:
+//   1. running process path
+//   2. App Paths registry key
+//   3. common install paths
+// Each probe is wrapped in try/catch; any error just falls through to the next.
+// Returns the path string, or null if not found.
+function detectZcode() {
+  // 1) running process
+  try {
+    var out = execSync(
+      'powershell -NoProfile -Command "(Get-Process ZCode -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Path)"',
+      { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }
+    ).trim();
+    if (out) return out;
+  } catch (e) {}
+
+  // 2) registry App Paths
+  try {
+    var reg = execSync(
+      'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\ZCode.exe" /ve',
+      { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }
+    );
+    var m = /REG_SZ\s+(.+)/.exec(reg);
+    if (m && m[1].trim()) return m[1].trim();
+  } catch (e) {}
+
+  // 3) common paths
+  var candidates = [
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "ZCode", "ZCode.exe"),
+    "D:\\zcode\\ZCode.exe",
+    "C:\\Program Files\\ZCode\\ZCode.exe",
+    "C:\\Program Files (x86)\\ZCode\\ZCode.exe",
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    try {
+      if (fs.existsSync(candidates[i])) return candidates[i];
+    } catch (e) {}
+  }
+  return null;
+}
+
 function main() {
   // Task 5 fills this in.
 }
@@ -54,6 +95,7 @@ module.exports = {
   toFileUrl,
   hasPlaceholder,
   replacePlaceholder,
+  detectZcode,
 };
 
 if (require.main === module) {
