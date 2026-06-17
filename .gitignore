@@ -16,6 +16,11 @@ verify-*.log
 !wallpaper.svg
 !EffectPreview.png
 
+# Everything under wallpapers/ is private (any format). Ignore the
+# contents but keep the directory itself in the repo via .gitkeep.
+wallpapers/*
+!wallpapers/.gitkeep
+
 # OS / editor cruft
 Thumbs.db
 Desktop.ini

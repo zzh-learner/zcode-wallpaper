@@ -28,7 +28,7 @@ npm install        # 装唯一的依赖 ws
 
 - 所有路径都是**动态探测**的（ZCode.exe 位置、项目自身目录），不写死
 - 你的私有壁纸图被 `.gitignore` 排除，不会推到仓库
-- 唯一需要每台电脑各自做的事：`npm install`（装依赖）+ 把你自己的图路径填进 `wallpaper.css`
+- 唯一需要每台电脑各自做的事：`npm install`（装依赖）+ 把你自己的图放进 `wallpapers/` 并把 `file:///` 绝对路径填进 `wallpaper.css`
 
 **在新电脑上启动 ZCode 的流程和原来一样：**
 1. 完全退出 ZCode（窗口 + 托盘）→ 双击 `start-zcode.bat`
@@ -74,18 +74,33 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 
 ## 换自己的壁纸图
 
-1. 把图放到**纯英文路径**目录（避免 `file:///` 加载中文路径失败），例如：
+> ⚠️ **必须用 `file:///` 绝对路径**。ZCode 的页面运行在 `app.asar` 内部（URL 是 `.../app.asar/out/renderer/index.html`），写相对路径（如 `url("my.jpg")`）会被解析到 app.asar 里那个不存在的位置，**背景图加载失败、看不到效果**。这是最常踩的坑。
+
+### 推荐做法：把图放进 `wallpapers/` 目录
+
+项目根目录下有个专门的 **`wallpapers/`** 文件夹（已被 `.gitignore` 忽略，你的私人照片不会被提交）。换图三步：
+
+1. 把图复制进 `wallpapers/`，例如：
    ```
-   C:\Users\<你的用户名>\Pictures\zcode-bg\my-wallpaper.jpg
+   C:\Users\<你的用户名>\Documents\zcode-wallpaper\wallpapers\my-wallpaper.jpg
    ```
-   或者直接把图放进本项目目录（和 wallpaper.css 同级），用相对路径最省心。
-2. 打开 `wallpaper.css`，改第 1 处 **`[图]`**：
+2. 打开 `wallpaper.css`，改第 1 处 **`[图]`**，用 `file:///` + 正斜杠的绝对路径：
    ```css
-   background-image: url("file:///C:/Users/<你的用户名>/Pictures/zcode-bg/my-wallpaper.jpg") !important;
+   background-image: url("file:///C:/Users/<你的用户名>/Documents/zcode-wallpaper/wallpapers/my-wallpaper.jpg") !important;
    ```
-   图在本项目目录里则用相对路径：`url("my-wallpaper.jpg")`
-   （规则：绝对路径开头 `file:///`，盘符后 `\` 全换 `/`，别用中文路径和空格）
 3. 双击 `inject-only.bat`，秒换图（不用重启 ZCode）
+
+### 路径怎么从 Windows 路径转成 `file:///` 形式
+
+规则很简单：
+- 开头加 `file:///`（三个斜杠）
+- 盘符后的反斜杠 `\` **全部换成正斜杠 `/`**
+- 路径里别用中文、别用空格（`file://` 加载中文/空格路径可能失败）
+
+```
+C:\Users\john\Pictures\bg.jpg
+→ file:///C:/Users/john/Pictures/bg.jpg
+```
 
 支持 `.jpg .jpeg .png .webp .gif .svg`。
 
@@ -110,6 +125,7 @@ ZCode 窗口打开后，双击 **`inject-only.bat`**：
 | `remove-wallpaper.bat` | 移除壁纸 |
 | `inject.cjs` | 核心注入器（CDP 客户端，含 ws://localhost→127.0.0.1 修复） |
 | `wallpaper.css` | 壁纸样式（图/透明度/模糊都在这调） |
+| `wallpapers/` | **放你自己的壁纸图**（`.gitignore` 已忽略，不会提交私人照片） |
 | `wallpaper.svg` | 自带测试图（紫蓝渐变 + 字样） |
 | `selftest.cjs` | 注入逻辑自检（8 项） |
 | `cdp-mock-test.cjs` | CDP 协议链路自检（mock，3 项） |

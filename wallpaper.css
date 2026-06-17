@@ -18,7 +18,7 @@
         - 纯英文路径，别用中文/空格（file:// 加载中文路径可能失败）
       默认用自带的测试图 wallpaper.svg，换成你的图即可。 */
 body {
-  background-image: url("wallpaper.svg") !important; /* [图] 改成你自己的，如 url("file:///D:/Photos/bg.jpg") */
+  background-image: url("file:///C:/Users/johnl/Documents/zcode-wallpaper/wallpapers/DSC06952.jpg") !important; /* [图] 改成你自己的，如 url("file:///D:/Photos/bg.jpg") */
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
