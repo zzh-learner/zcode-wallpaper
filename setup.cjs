@@ -30,12 +30,31 @@ function toFileUrl(p) {
   return "file:///" + String(p).replace(/\\/g, "/");
 }
 
+// True if css still contains the __WALLPAPER__ placeholder.
+function hasPlaceholder(css) {
+  return css.indexOf(PLACEHOLDER) !== -1;
+}
+
+// Replace all __WALLPAPER__ occurrences in css with fileUrl.
+// If the placeholder is already gone (already configured / user edited),
+// returns css unchanged (idempotent + preserves user customizations).
+function replacePlaceholder(css, fileUrl) {
+  if (!hasPlaceholder(css)) return css;
+  return css.split(PLACEHOLDER).join(fileUrl);
+}
+
 function main() {
   // Task 5 fills this in.
 }
 
 // Export pure functions for testing; run main() only when invoked directly.
-module.exports = { parseNodeVersion, isNodeVersionOk, toFileUrl };
+module.exports = {
+  parseNodeVersion,
+  isNodeVersionOk,
+  toFileUrl,
+  hasPlaceholder,
+  replacePlaceholder,
+};
 
 if (require.main === module) {
   main();
