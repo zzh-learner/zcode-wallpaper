@@ -15,7 +15,8 @@
   "scripts": {
     "inject": "node inject.cjs",
     "remove": "node inject.cjs --remove",
-    "test": "node selftest.cjs && node cdp-mock-test.cjs"
+    "setup": "node setup.cjs",
+    "test": "node selftest.cjs && node cdp-mock-test.cjs && node setuptest.cjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
