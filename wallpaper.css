@@ -6,19 +6,17 @@
    2. 把 UI 主背景变量改成半透明，让壁纸透出来
    3. 用 !important 压过应用样式
 
-   调参说明（下面每处都标了 [调这里]）：
-   - [图]  把 url(...) 换成你的图。本机路径用 file:/// 形式
-   - [透明度]  opacity:0.85 → 数字越小壁纸越明显，但字也越难看清
+   调参说明：
+   - [背景图]  由 inject.cjs 启动时从 wallpapers/ 随机选一张，本文件不写图路径。
+               换图只需往 wallpapers/ 加图/删图，不用改这里。
+   - [透明度]  rgba(...,0.82) 最后一位 → 数字越小壁纸越明显，但字也越难看清
    - [模糊]  blur(0px) → 想要毛玻璃效果就调大，如 blur(8px)
    ============================================================ */
 
-/* 1) 背景层：图挂在 body 上。
-      [图] 把下面 url() 换成你自己的图。规则：
-        - 开头 file:///，盘符后用正斜杠 /
-        - 纯英文路径，别用中文/空格（file:// 加载中文路径可能失败）
-      默认用自带的测试图 wallpaper.svg，换成你的图即可。 */
+/* 1) 背景层样式：尺寸/定位/重复/固定。背景图由 inject.cjs 启动时
+      从 wallpapers/ 随机选一张并动态追加 background-image 规则。
+      文件名请用纯英文、别用中文/空格（file:// 加载中文路径可能失败）。 */
 body {
-  background-image: url("__WALLPAPER__/wallpaper.svg") !important; /* [图] setup.bat 会自动填入 wallpapers 目录的绝对路径；想换图改文件名即可 */
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
