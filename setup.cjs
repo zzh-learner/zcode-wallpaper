@@ -23,12 +23,19 @@ function isNodeVersionOk(major) {
   return major >= MIN_NODE_MAJOR;
 }
 
+// Convert a Windows absolute path to a file:/// URL.
+// "C:\\a\\b\\wallpapers" -> "file:///C:/a/b/wallpapers"
+// Rule: prefix "file:///", then replace all backslashes with forward slashes.
+function toFileUrl(p) {
+  return "file:///" + String(p).replace(/\\/g, "/");
+}
+
 function main() {
   // Task 5 fills this in.
 }
 
 // Export pure functions for testing; run main() only when invoked directly.
-module.exports = { parseNodeVersion, isNodeVersionOk };
+module.exports = { parseNodeVersion, isNodeVersionOk, toFileUrl };
 
 if (require.main === module) {
   main();

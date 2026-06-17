@@ -13,5 +13,11 @@ check("parseNodeVersion('v24.16.0') -> 24", setup.parseNodeVersion("v24.16.0") =
 check("isNodeVersionOk(24) -> true", setup.isNodeVersionOk(24) === true);
 check("isNodeVersionOk(17) -> false", setup.isNodeVersionOk(17) === false);
 
+// --- Task 2: toFileUrl ---
+check(
+  "toFileUrl('C:\\\\a\\\\b\\\\wallpapers') -> file:///C:/a/b/wallpapers",
+  setup.toFileUrl("C:\\a\\b\\wallpapers") === "file:///C:/a/b/wallpapers"
+);
+
 console.log("\n" + pass + " passed, " + fail + " failed.");
 process.exit(fail > 0 ? 1 : 0);
