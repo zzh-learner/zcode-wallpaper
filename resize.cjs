@@ -52,7 +52,51 @@ async function resizeOne(srcPath, thumbPath) {
 }
 
 async function main() {
-  // Task 3 fills this in.
+  var srcDir = path.join(__dirname, "wallpapers");
+  var thumbDir = path.join(__dirname, "wallpapers-thumb");
+
+  console.log("[wallpaper] Step 1: scan source images");
+  var images = listSourceImages(srcDir);
+  if (images.length === 0) {
+    console.log("[wallpaper]   wallpapers/ 为空，没图可缩。把图放进 wallpapers/ 后重跑。");
+    process.exit(0);
+  }
+  console.log("[wallpaper]   found " + images.length + " images");
+
+  console.log("[wallpaper] Step 2: ensure wallpapers-thumb/");
+  fs.mkdirSync(thumbDir, { recursive: true });
+
+  console.log("[wallpaper] Step 3: resize (skip already-resized)");
+  var added = 0,
+    skipped = 0,
+    failed = 0;
+  for (var i = 0; i < images.length; i++) {
+    var name = images[i];
+    var srcPath = path.join(srcDir, name);
+    var base = name.replace(/\.[^.]+$/, ""); // strip extension
+    var thumbPath = path.join(thumbDir, base + ".jpg");
+    if (!needsResize(srcPath, thumbPath)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await resizeOne(srcPath, thumbPath);
+      var kb = Math.round(fs.statSync(thumbPath).size / 1024);
+      console.log("[wallpaper]   " + base + ".jpg  (" + kb + " KB)");
+      added++;
+    } catch (e) {
+      console.error("[wallpaper]   " + name + " FAILED: " + e.message);
+      failed++;
+    }
+  }
+
+  console.log("[wallpaper] ========================================");
+  console.log(
+    "[wallpaper]  缩图完成: 新增 " + added + " / 跳过 " + skipped + " / 失败 " + failed
+  );
+  console.log("[wallpaper]  inject 会从 wallpapers-thumb/ 随机选图");
+  console.log("[wallpaper] ========================================");
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 module.exports = { listSourceImages, needsResize, MAX_WIDTH, JPEG_QUALITY };
