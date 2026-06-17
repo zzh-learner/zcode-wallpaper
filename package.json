@@ -19,6 +19,7 @@
     "test": "node selftest.cjs && node cdp-mock-test.cjs && node setuptest.cjs"
   },
   "dependencies": {
+    "sharp": "^0.35.1",
     "ws": "^8.18.0"
   }
 }
