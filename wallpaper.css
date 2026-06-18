@@ -1,16 +1,23 @@
 /* ============================================================
    ZCode 壁纸 CSS —— 由 CDP 注入，不修改 app.asar
    ============================================================
-   原理：
-   1. 背景图挂在 body 上（铺满、不滚动）
-   2. 把 UI 主背景变量改成半透明，让壁纸透出来
-   3. 用 !important 压过应用样式
+   原理（全屏透明模式）：
+   1. 壁纸挂在 body 上（铺满、不滚动）—— 壁纸是绝对主角
+   2. 把所有 UI 背景变量 / Tailwind 背景类强制设成 transparent
+      让代码区、侧边栏、面板全部透出底层壁纸
+   3. 不再有 alpha 调参 —— 透明就是透明，要么全显要么不显
 
-   调参说明：
-   - [背景图]  由 inject.cjs 启动时从 wallpapers/ 随机选一张，本文件不写图路径。
-               换图只需往 wallpapers/ 加图/删图，不用改这里。
-   - [透明度]  rgba(...,0.82) 最后一位 → 数字越小壁纸越明显，但字也越难看清
-   - [模糊]  blur(0px) → 想要毛玻璃效果就调大，如 blur(8px)
+   为什么没有透明度旋钮？
+      早期版本用 rgba(...,0.82) 给 UI 面板做半透明，试图调出
+      "壁纸透出但字还看得清"。实测发现 ZCode 的布局里，大量 body
+      区域（面板间隙、窗口边缘）根本不被任何半透明面板覆盖，
+      这些地方壁纸永远是 100% 满强度，与 alpha 无关。所以无论把
+      alpha 调到 0.82 / 0.95 / 1.0，肉眼几乎看不出区别 —— 整个
+      透明度旋钮对当前 UI 结构基本无效，已删除。
+
+   可读性怎么办？
+      字直接压在壁纸上。如果觉得糊眼，只能靠选高对比、深色调、
+      构图简洁的壁纸（wallpapers/ 目录里换图），CSS 这层无能为力。
    ============================================================ */
 
 /* 1) 背景层样式：尺寸/定位/重复/固定。背景图由 inject.cjs 启动时
@@ -23,51 +30,19 @@ body {
   background-attachment: fixed !important;
 }
 
-/* 2) 让两个主题的主背景变半透明，透出壁纸。
-      原始 --color-background 在 .theme-zai-dark / .theme-zai-light 上定义，
-      这里用 rgba 覆盖它（最后一位是 alpha，越小越透明）。 */
-.theme-zai-dark {
-  --color-background: rgba(18, 18, 22, 0.82) !important;      /* [透明度] dark 主题 */
-}
+/* 2) 把两个主题的所有主背景变量清空，让面板不再画实色 */
+.theme-zai-dark,
 .theme-zai-light {
-  --color-background: rgba(245, 245, 247, 0.82) !important;  /* [透明度] light 主题 */
+  --color-background: transparent !important;
+  --color-background-alt: transparent !important;
+  --color-background-win-alt: transparent !important;
 }
 
-/* 3) 备用变量也覆盖，避免边角漏出实色 */
-.theme-zai-dark {
-  --color-background-alt: rgba(24, 24, 28, 0.82) !important;
-}
-.theme-zai-light {
-  --color-background-alt: rgba(250, 250, 252, 0.82) !important;
-}
-
-/* 3b) 【关键】Windows 专用背景变量。ZCode 主框架 div 用的是
-      bg-background-win-alt 类（对应 --color-background-win-alt），
-      不是 --color-background。必须把这个也改透明，否则壁纸被
-      这个 div 的实色背景（#ececee / dark 实色）整个盖住。 */
-.theme-zai-dark {
-  --color-background-win-alt: rgba(18, 18, 22, 0.82) !important;   /* [透明度] dark */
-}
-.theme-zai-light {
-  --color-background-win-alt: rgba(245, 245, 247, 0.82) !important; /* [透明度] light */
-}
-
-/* 3c) 兜底：直接把所有背景相关的 Tailwind 工具类设成透明，
-      防止有元素用了内联色或其它变量漏出实色。 */
+/* 3) 兜底：直接把所有背景相关的 Tailwind 工具类也设成透明，
+      防止有元素用了内联色或其它变量漏出实色盖住壁纸。 */
 .bg-background,
 .bg-background-alt,
 .bg-background-win-alt,
 .bg-surface {
   background-color: transparent !important;
 }
-
-/* 4) 想要毛玻璃就把下面注释去掉，blur 越大越糊 */
-/*
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  backdrop-filter: blur(8px);  !* [模糊] *!
-  z-index: -1;
-}
-*/
