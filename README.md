@@ -1,6 +1,7 @@
 # ZCode 壁纸 (zcode-wallpaper)
 
 给 ZCode 桌面客户端加自定义壁纸，**不修改 app.asar**，ZCode 升级后不会被覆盖。
+支持**图片壁纸**和**视频壁纸**（把 `.mp4` 当动态背景播放）。
 
 ## 效果预览
 
@@ -8,16 +9,16 @@
 
 ## 功能
 
-- **一键启动带壁纸的 ZCode**：双击 `start-zcode.bat`，自动带调试端口启动 ZCode 并注入壁纸。
-- **随机轮播**：每次启动从你的壁纸库里随机选一张，同一次会话内固定。
-- **批量缩图**：相机原图（几十 MB）会自动缩到可渲染的大小，增量处理、重复跑很快。
-- **可调透明度 / 毛玻璃**：改 `wallpaper.css` 一个数字即可。
-- **一键移除**：双击 `remove-wallpaper.bat` 立即恢复默认外观。
+- **一键菜单**：双击 `wallpaper.bat`，按场景选功能（初始化 / 启动 / 换图 / 视频壁纸 / 移除 / …）。
+- **图片壁纸**：从壁纸库随机选一张，同一次会话内固定。
+- **视频壁纸**：把 `.mp4` / `.webm` / `.mov` 注入成动态背景，`autoplay muted loop` 自动循环播放。
+- **批量缩图**：相机原图（几十 MB）自动缩到可渲染的大小，增量处理、重复跑很快。
+- **一键移除**：撤掉已注入的壁纸，立即恢复默认外观（同时清掉图片 `<style>` 和视频 `<video>`）。
 - **跨电脑可用**：不包含任何本机专属信息，clone 到任意 Windows 电脑按下方流程跑一遍即可。
 
 ## 前置要求
 
-- **Node.js v18+**：https://nodejs.org 下 LTS 版安装。没装的话 `setup.bat` 会提示，不会报一堆错。
+- **Node.js v18+**：https://nodejs.org 下 LTS 版安装。没装的话菜单会提示，不会报一堆错。
 - **ZCode 客户端**已安装。
 
 ## 1. 安装
@@ -27,91 +28,127 @@ git clone https://github.com/zzh-learner/zcode-wallpaper.git zcode-wallpaper
 cd zcode-wallpaper
 ```
 
-## 2. 初始化（每台新电脑做一次）
-
-双击 **`setup.bat`**。它会自动完成：
-
-- 检查 Node.js 版本（≥18）
-- 探测 ZCode.exe 位置
-- 创建 `wallpapers/` 目录（放你自己的图）
-- 安装依赖（`npm install`）
-
-看到 `初始化完成！` 即可。
-
-## 3. 放图片
-
-把你的壁纸原图复制进 **`wallpapers/`** 目录（项目根目录下，已被 `.gitignore` 忽略，私人照片不会提交）。
-
-> ⚠️ 文件名请用**纯英文、别用中文/空格**（`file://` 加载中文路径可能失败）。支持 `.jpg .jpeg .png .webp`。
-
-## 4. 压缩图片
-
-相机原图（30-39MB）体积过大，Electron 的 `background-image` 加载会静默失败。必须先缩图：
-
-双击 **`resize.bat`**。它会：
-
-- 扫描 `wallpapers/` 的栅格图
-- 缩到长边 ≤2560px、JPEG 质量 85
-- 输出到 `wallpapers-thumb/`（inject 实际读的是这里）
-- **增量**：已缩过且不比源旧的自动跳过
-
-看到"缩图完成"即可。
-
-> 💡 以后每加一张新图：放进 `wallpapers/` → 双击 `resize.bat`。
-
-## 5. 启动
+## 2. 启动（图片壁纸）
 
 > ⚠️ **必须先完全退出 ZCode**（所有窗口 + 右下角托盘图标）。ZCode 是单实例应用，有残留进程时带调试端口的新实例会启动失败。
 
-双击 **`start-zcode.bat`**。它会自动完成全部步骤：
+双击项目根目录的 **`wallpaper.bat`**，选择菜单：
+
+- **首次用 / 新电脑**：选 `1 新机器初始化`（装依赖 + 缩图 + 启动，一条龙）
+- **日常开机**：选 `2 日常启动带壁纸`（直接启动并注入）
+
+启动流程会自动完成全部步骤：
 
 1. 探测并杀掉残留的 ZCode 进程
 2. 带 `--remote-debugging-port=9222` 启动 ZCode
 3. 等待主窗口就绪
 4. 注入壁纸（带重试验证，冷启动慢也能兜住）
 
-看到 `Done! Wallpaper applied.` 即成功。以后每次开机用 ZCode，双击这一个 bat 即可。
+看到 `Done! Wallpaper applied.` 即成功。
 
-## 6. 移除壁纸
+### 放图片
 
-双击 **`remove-wallpaper.bat`**，当前会话立即恢复默认外观。
+把壁纸原图复制进 **`wallpapers/`** 目录（项目根目录下，已被 `.gitignore` 忽略，私人照片不会提交）。
 
-## 进阶：调透明度 / 毛玻璃
+> ⚠️ 文件名请用**纯英文、别用中文/空格**（`file://` 加载中文路径可能失败）。支持 `.jpg .jpeg .png .webp`。
 
-打开 `wallpaper.css`，按注释调：
+### 压缩图片
 
-- **`[透明度]`**：`rgba(..., 0.82)` 最后一位（0~1），越小壁纸越显、字越淡
-- **`[模糊]`**：取消第 4 段注释，设 `blur(8px)`
+相机原图（30-39MB）体积过大，Electron 的 `background-image` 加载会静默失败，必须先缩图。
+首次用菜单 `1` 会自动缩；之后每加一张新图，选菜单 `3 换壁纸图后重注入`（缩图 + 重新注入）即可。
 
-改完双击 `inject-only.bat` 即时生效（无需重启 ZCode）。
+## 3. 视频壁纸（可选）
+
+视频壁纸把 `.mp4` 等视频当动态背景播放。原理和图片不同：CSS `background-image`
+**播不了视频**，所以注入的是一个真实的 `<video>` DOM 元素（铺满屏幕、沉到所有 UI 之下）。
+
+### 放视频
+
+把视频文件复制进 **`wallpapers-video/`** 目录（已被 `.gitignore` 忽略）。
+
+> ⚠️ 文件名建议用**纯英文、别用中文/空格**。支持 `.mp4 .webm .mov .ogg .ogv`。
+> 视频不经缩放，Electron 直接播原文件——建议挑体积小的（几十 MB 的短 clip 效果最好）。
+
+### 启动视频壁纸
+
+菜单里选：
+
+- **`7 启动带视频壁纸`**：ZCode 没开时，一键启动并注入视频壁纸
+- **`8 注入视频壁纸`**：ZCode 已经用 `start-zcode` 开着，直接注入视频（换视频后用这个）
+
+### 指定单个视频 / 指定目录
+
+不一定要把视频拷进 `wallpapers-video/`，也可以用环境变量旁路：
+
+- `ZCODE_WP_VIDEO`：指定**单个文件**绝对路径（跳过随机选片）
+- `ZCODE_WP_VIDEO_DIR`：指定一个**目录**，从中随机选一个
+
+视频 URL 会做百分号编码，中文/空格路径基本能用，但仍强烈建议英文文件名。
+
+## 4. 移除壁纸
+
+菜单选 `5 移除壁纸`，当前会话立即恢复默认外观。
+**一个移除命令同时清掉图片 `<style>` 和视频 `<video>`**，不用记自己用了哪个模式。
+
+## 进阶：改样式
+
+- **图片壁纸**：改 `lib/wallpaper.css`（全屏透明模式，把 UI 背景变量强制透明让壁纸透出）
+- **视频壁纸**：改 `lib/wallpaper-video.css`（视频层定位 / 铺满 / `html,body` 透明）
+
+改完菜单选 `4 只重新注入 CSS`（图片）或 `8 注入视频壁纸`（视频）即时生效，无需重启 ZCode。
+
+> ℹ️ 早期版本有"透明度旋钮"（`rgba(...,0.82)` 调 alpha），实测对当前 ZCode UI 结构基本无效
+> （面板盖不满整个窗口，没被面板盖住的区域壁纸永远是满强度），已删除。现在是"全屏透明模式"：
+> 要么全显要么不显，没有中间态。字直接压在背景上，可读性只能靠选高对比、深色调的图/视频解决。
 
 ## 文件说明
 
 | 文件 | 作用 |
 |------|------|
-| `setup.bat` | 初始化：检查环境 + 准备目录 + 装依赖 |
-| `resize.bat` | 把 `wallpapers/` 原图批量缩到 `wallpapers-thumb/` |
-| `start-zcode.bat` | 启动带壁纸的 ZCode（一键完成启动+注入） |
-| `inject-only.bat` | 单独注入壁纸（改完 CSS 后用，**需要 ZCode 已通过 `start-zcode.bat` 开着**） |
-| `remove-wallpaper.bat` | 移除壁纸 |
-| `wallpaper.css` | 壁纸样式（透明度/模糊在这调） |
+| `wallpaper.bat` | **总入口**：双击它出场景菜单，按需调用下面的脚本 |
+| `bin/setup.bat` | 初始化：检查环境 + 准备目录 + 装依赖 |
+| `bin/resize.bat` | 把 `wallpapers/` 原图批量缩到 `wallpapers-thumb/` |
+| `bin/start-zcode.bat` | 启动带壁纸的 ZCode（一键完成启动+注入；可选参数 `video`） |
+| `bin/inject-only.bat` | 单独注入壁纸（改完 CSS 后用，**需要 ZCode 已通过 `start-zcode` 开着**；可选参数 `video`） |
+| `bin/remove-wallpaper.bat` | 移除壁纸（同时清图片 + 视频） |
+| `bin/probe.ps1` | 调试端口探测（`start-zcode` / `inject-only` 共用） |
+| `lib/inject.cjs` | CDP 连接 + 注入逻辑（图片 / 视频 / 移除三种模式） |
+| `lib/wallpaper.css` | 图片壁纸样式 |
+| `lib/wallpaper-video.css` | 视频壁纸样式（视频层定位 + 透明 UI 层） |
 | `wallpapers/` | **放你的原图**（`.gitignore` 已忽略） |
 | `wallpapers-thumb/` | 缩图产物（inject 实际读这里，`.gitignore` 已忽略） |
+| `wallpapers-video/` | **放你的视频**（`.gitignore` 已忽略） |
+
+## 命令行 / npm 脚本
+
+不想用菜单，也可以直接跑：
+
+```bash
+npm run inject          # 注入图片壁纸（随机选图）
+npm run inject:video    # 注入视频壁纸（随机选视频）
+npm run remove          # 移除壁纸（图片 + 视频都清）
+npm test                # 跑全部测试
+```
+
+或直接 `node lib/inject.cjs [--video|--remove|--list]`。环境变量 `ZCODE_WP_CSS` / `ZCODE_WP_VIDEO` /
+`ZCODE_WP_VIDEO_DIR` 可旁路随机选图/视频。
 
 ## 故障排查
 
 | 现象 | 处理 |
 |------|------|
-| 看不到壁纸 | 确认：① 已跑过 `resize.bat`（`wallpapers-thumb/` 非空）② 是用 `start-zcode.bat` 启动的（不是直接开 ZCode）③ 启动前已完全退出旧 ZCode |
-| 双击 `inject-only.bat` 提示 "Could not reach ZCode debug port" | `inject-only.bat` 只注入、不启动 ZCode。**ZCode 必须已通过 `start-zcode.bat` 开着**（带调试端口）。如果 ZCode 是直接开的（没走 `start-zcode.bat`），端口 9222 没开 → 先完全退出再用 `start-zcode.bat` 重启 |
-| `找不到 ZCode.exe` | 自动探测失败，手动编辑 `start-zcode.bat` 里的 `ZCODE_EXE` |
-| 壁纸太花看不清字 | 调高 `wallpaper.css` 里的 alpha，或开毛玻璃模糊 |
-| ZCode 升级后壁纸没了 | 正常，升级会换 app.asar 但不影响本工具。重跑 `start-zcode.bat` 即可 |
+| 看不到壁纸 | 确认：① 已缩图（`wallpapers-thumb/` 非空）或 `wallpapers-video/` 有视频 ② 是用 `start-zcode` 启动的（不是直接开 ZCode）③ 启动前已完全退出旧 ZCode |
+| 视频壁纸看不到 | 同上，外加：视频文件名是否纯英文、文件是否损坏。视频铺满用的是 `object-fit:cover`，会裁边 |
+| `inject-only` 提示 "Could not reach ZCode debug port" | `inject-only` 只注入、不启动 ZCode。**ZCode 必须已通过 `start-zcode` 开着**（带调试端口）。如果 ZCode 是直接开的，端口 9222 没开 → 先完全退出再用 `start-zcode` 重启 |
+| `找不到 ZCode.exe` | 自动探测失败，手动编辑 `bin/start-zcode.bat` 里的 `ZCODE_EXE` |
+| 壁纸/视频太花看不清字 | 背景直接压在字下，可读性靠选高对比、深色调、构图简洁的图/视频解决，CSS 这层无能为力 |
+| 侧边栏有一块深色盖住背景 | ZCode 框架硬画的实色背景，不走任何覆盖的 CSS 变量，CSS 改不动。已知遗留 |
+| ZCode 升级后壁纸没了 | 正常，升级会换 app.asar 但不影响本工具。重跑 `start-zcode` 即可 |
 
 ## 安全说明
 
 - 调试端口 9222 仅监听本机回环（127.0.0.1），不对外网开放；
-- 注入的是纯 CSS，不读写文件、不上传数据；
+- 注入的是纯 CSS + 一个 `<video>` DOM 元素，不读写文件、不上传数据；
 - 不修改、不替换 ZCode 的任何程序文件。
 
 ## License

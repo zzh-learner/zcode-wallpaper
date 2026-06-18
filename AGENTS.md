@@ -11,12 +11,16 @@
 
 ```
 wallpaper.bat                 总入口菜单（根目录）：场景化选择（新机器初始化 / 日常启动 / 换图重注入
-                              / 只重注入 / 移除 / 重装依赖），按场景调 bin/ 下的脚本，跑完回菜单。
-                              ASCII-only cmd 循环，中文菜单由 lib/menu.cjs 打印。
+                              / 只重注入 / 视频壁纸 / 移除 / 重装依赖），按场景调 bin/ 下的脚本，
+                              跑完回菜单。ASCII-only cmd 循环，中文菜单由 lib/menu.cjs 打印。
 bin/setup.bat  → lib/setup.cjs        装 sharp/ws 依赖
 bin/resize.bat → lib/resize.cjs        wallpapers/*.jpg → wallpapers-thumb/*.jpg（2560px 缩图）
 bin/start-zcode.bat           启动 ZCode(带 debug port) → 等待 page target → 调 lib/inject.cjs
-lib/inject.cjs                CDP 连接 → Runtime.evaluate 注入 wallpaper.css
+                              可选参数 "video"：传 --video 给 inject.cjs，注入视频壁纸而非图片
+lib/inject.cjs                CDP 连接 → Runtime.evaluate 注入。
+                              - 默认（图片）：注入 <style>，body background-image = 随机缩图
+                              - --video：注入 <style>(透明层) + 真实 <video> 元素（见下面"视频壁纸"）
+                              - --remove：同时清掉 <style> 和 <video>，不管之前注的是图还是视频
 bin/probe.ps1                 start-zcode/inject-only 共用的 debug-port 探测（同目录调用，见 bin/ 下两个 .bat）
 ```
 
@@ -154,14 +158,82 @@ elementsWithWallpaperBg = []                     ← 没有任何子元素有壁
 
 ---
 
+## 视频壁纸（`--video` 模式）
+
+图片壁纸之外的第二种背景：把 `.mp4`（等视频）当动态背景播。和图片走**同一个 `inject.cjs`**，
+只是 MODE 不同——CDP 连接/重试/验证那套踩过坑的逻辑共用，**没有另写一个 inject-video.cjs**
+（两份拷贝就是两份能各自再坏一次的机会，见核心教训 1 的二次事故）。
+
+### 为什么不能复用图片的 CSS background-image
+
+**CSS `background-image` 播不了视频。** 这是浏览器的硬限制，不是 ZCode 的事。所以视频模式
+走一条**不同的注入路径**：往页面里塞一个真实的 `<video>` DOM 元素（`id=zcode-user-wallpaper-video`），
+`position:fixed; object-fit:cover; z-index:-100` 沉到所有 UI 底下，`autoplay muted loop playsinline`，
+IIFE 里再 `.play()` 兜底（muted+autoplay 在 Chromium/Electron 基本可靠，但显式 play() 防个别 build）。
+html/body 强制 transparent 让视频从底层透出，外加复用 `wallpaper.css` 的 UI 透明层。
+
+### 两个 id，一个 --remove
+
+- `zcode-user-wallpaper` —— 图片模式注入的 `<style>`（视频模式也会注入它，放透明层 + 视频层 CSS）
+- `zcode-user-wallpaper-video` —— 视频模式注入的 `<video>` 元素
+
+**`--remove` 会同时清掉这两个 id**，不管之前注的是图还是视频。用户不用记自己用了哪个模式。
+（之前 remove 只查 style id；视频模式下用户 remove 会发现 style 没了但 video 还在——这个坑
+在 `selftest.cjs` 的 "remove cleans up BOTH" 测试里钉死了。）
+
+### 视频从哪来（三种方式，优先级从高到低）
+
+1. `ZCODE_WP_VIDEO` 环境变量 —— 指定**单个文件**的绝对路径，旁路随机选片（对称图片的 `ZCODE_WP_CSS`）
+2. `ZCODE_WP_VIDEO_DIR` 环境变量 —— 指定一个**目录**，从中随机选一个视频
+3. 默认 —— `<项目根>/wallpapers-video/`
+
+空目录会打印提示并 `exit 0`（对称图片空目录的处理），不会注入。
+
+### 中文路径 / 空格路径
+
+视频 URL 走 `encodeFileUrl()`（百分号编码 path 部分，保留 `file:///` 前缀）。原始中文目录
+（如 `ZCODE_WP_VIDEO_DIR=G:\新建文件夹\...`）能用，但**强烈建议把样本拷进 `wallpapers-video/`
+并重命名成纯 ASCII**——`file://` 加载中文/空格路径在某些 Chromium build 上仍可能翻车，
+编码只是兜底不是银弹。
+
+### 菜单集成
+
+菜单场景 7（启动带视频壁纸，一键）和 8（注入视频壁纸，ZCode 已开）是场景 2/4 的视频变体：
+它们把字面量参数 `"video"` 传给 `start-zcode.bat` / `inject-only.bat`，后者转成 `--video` 传给
+`inject.cjs`。不传参 = 图片模式（向后兼容）。
+
+### 视频不缩放
+
+`resize.cjs` **不碰视频**。Electron 直接播原文件，mp4 多大就吃多大。`wallpapers-video/` 里的样本
+建议挑体积小的（本项目测试用的是 ~80-110MB 的短 clip）。
+
+### 已知遗留（和图片模式同款）
+
+侧边栏那块实色深色背景是 ZCode 框架硬画的，不走任何我们覆盖的变量/Tailwind 类，
+**会盖住视频**（和盖住图片一模一样，见核心教训 2 的"已知遗留"）。要彻底搞定只能从 JS 层
+在侧边栏元素上做运行时覆盖——是个新坑，别默认 CSS/视频层全搞定了。
+
+---
+
 ## 测试
 
 `npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
-`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：6 个场景 + 退出项齐全、顺序对、
+`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：8 个场景 + 退出项齐全、顺序对、
 每个场景的中文说明和"调用哪些脚本"标注都在、5 个底层脚本名至少出现一次。
 防止菜单被人改坏（删场景、改错调用链说明）却没人发现。
+（场景 7/8 是视频壁纸变体，calls 标注是 `start-zcode(video)` / `inject-only(video)`。）
+
+`selftest.cjs` 现在还覆盖视频模式：`buildVideoExpression()` 的输出含 `<video>` 元素创建、
+src/autoplay/muted/loop/playsinline、`.play()` 兜底；以及 **`--remove` 同时清掉 `<style>` 和
+`<video>` 两个元素**（不管之前注的是图还是视频）。`listVideos` / `encodeFileUrl` 也有纯函数测试。
+
+`cdp-mock-test.cjs` 现在多跑一条 `inject.cjs --video`：mock 不用改（视频表达式返回 `'ok'`、
+verify 沿用 `'effect'`/`'noeffect'` 哨兵），但会断言 mock **确实收到了 `<video>` 创建指令和
+文件 URL**，且**没收到图片模式的 `background-image: url(...)` 规则**——钉死 MODE 路由不会
+串台。注意：mock 对 verify 哨兵和 remove 动作的检测用的是**宽松匹配**（正则 `'present'\s*:\s*'gone'`、
+子串 `'removed'`），不是逐字符匹配，因为表达式的内部空格/措辞是实现细节，不该让 mock 脆断。
 
 `cdp-retry-test.cjs` 是为第一次事故加的回归测试：mock 故意拒掉前 3 次 WS 握手，
 验证 inject.cjs 的 retry 能恢复。模拟冷启动握手失败场景。

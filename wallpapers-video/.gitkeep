@@ -1,0 +1,4 @@
+# 把测试视频（.mp4/.webm/.mov）放进这个目录，inject.cjs --video 会从中随机选一个。
+# 文件名建议用纯英文、别用中文/空格（file:// 加载中文路径可能失败；
+# 若用 ZCODE_WP_VIDEO_DIR 指向中文目录，inject.cjs 会做百分号编码）。
+# 这个目录的内容被 .gitignore 忽略，不会提交进仓库。

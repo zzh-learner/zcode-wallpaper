@@ -21,6 +21,11 @@ set "WP_ROOT=%~dp0.."
 set "DEBUG_PORT=9222"
 set "ZCODE_EXE="
 
+REM  Optional arg "video" switches to video wallpaper (passes --video to
+REM  inject.cjs). No arg = image wallpaper (backward compatible).
+set "MODE_FLAG="
+if /i "%~1"=="video" set "MODE_FLAG=--video"
+
 echo [wallpaper] Step 0: locate ZCode.exe
 for /f "delims=" %%P in ('powershell -NoProfile -Command "(Get-Process ZCode -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Path)" 2^>nul') do set "ZCODE_EXE=%%P"
 if not defined ZCODE_EXE for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\ZCode.exe" /ve 2^>nul ^| findstr /i "REG_SZ"') do set "ZCODE_EXE=%%B"
@@ -65,7 +70,7 @@ goto :hold
 
 :inject
 echo [wallpaper] Step 4: inject wallpaper ^(window ready after %tries% tries^)
-node "%WP_ROOT%\lib\inject.cjs"
+node "%WP_ROOT%\lib\inject.cjs" %MODE_FLAG%
 set rc=!errorlevel!
 echo.
 if "!rc!"=="0" (
