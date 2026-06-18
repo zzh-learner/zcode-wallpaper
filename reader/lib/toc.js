@@ -3,8 +3,10 @@
 // NOTE: returns {title,startOffset,endOffset}; in drag mode the full text is
 // in memory so getChapter just slices text.slice(start,end).
 
-const VOLUME_RE = /^第[一二三四五六七八九十百千零0-9]+卷(\s|\u3000)/;
-const CHAPTER_RE = /^第[一二三四五六七八九十百千零0-9]+章(\s|\u3000)/;
+// NOTE: '两' is a common Chinese numeral (两千 = 二千). See lib/reader-toc.cjs
+// for the bug this fixed (凡人修仙传 lost 447 chapters using 第两千…).
+const VOLUME_RE = /^第[一二两三四五六七八九十百千零0-9]+卷(\s|\u3000)/;
+const CHAPTER_RE = /^第[一二两三四五六七八九十百千零0-9]+章(\s|\u3000)/;
 
 function parseTOC(text) {
   const lines = text.split(/\r?\n/);

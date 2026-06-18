@@ -54,6 +54,16 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("heading with space accepted", r.chapters.length === 1 && r.chapters[0].title.indexOf("山边小村") !== -1);
 })();
 
+// --- '两' numeral must match (两千 = 二千). Real bug: 凡人修仙传 第两千章+
+//     were all dropped (447 chapters) because 两 was missing from the char class. ---
+(function(){
+  const text = "第一千九百九十九章 黑日\n　　正文。\n第两千章 涅盘圣体\n　　正文。\n第两千零一章 天戈灭敌\n　　正文。\n";
+  const r = parseTOC(text, "liang.txt");
+  check("'两' numeral headings all matched (3 chapters)", r.chapters.length === 3);
+  check("第两千章 matched", r.chapters.some(c => c.title.indexOf("涅盘圣体") !== -1));
+  check("第两千零一章 matched", r.chapters.some(c => c.title.indexOf("天戈灭敌") !== -1));
+})();
+
 // --- splitParagraphs: trims line-leading fullwidth spaces, drops empty lines ---
 // NOTE: splitParagraphs is a pure chunk->paragraphs helper. It does NOT know
 // which line is a heading; heading-stripping happens at the server chapter

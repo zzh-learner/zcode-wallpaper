@@ -29,5 +29,13 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     ps.length === 3 && ps[1].indexOf("段一") !== -1 && ps[2].indexOf("段二") !== -1);
 })();
 
+// '两' numeral must match (两千 = 二千). Mirror of readertoctest.cjs case.
+(function(){
+  const text = "第一千九百九十九章 黑日\n　　x\n第两千章 涅盘圣体\n　　x\n第两千零一章 天戈灭敌\n　　x\n";
+  const r = parseTOC(text);
+  check("'两' numeral headings matched (3)", r.chapters.length === 3);
+  check("第两千章 matched", r.chapters.some(c => c.title.indexOf("涅盘圣体") !== -1));
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
