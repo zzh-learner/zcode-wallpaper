@@ -1,14 +1,14 @@
 @echo off
 chcp 65001 >nul
 setlocal
-title ZCode Wallpaper Setup
+title ZCode Wallpaper Resizer
 
 REM ============================================================
-REM  ZCode Wallpaper - one-click setup for a new machine.
+REM  ZCode Wallpaper - resize source images to renderable thumbs.
 REM  ----------------------------------------------------------
-REM  - Pre-checks Node.js exists (pure batch; setup.cjs needs it).
-REM  - If missing, prints download link and exits.
-REM  - Otherwise hands off to setup.cjs for all real work.
+REM  - Pre-checks Node.js exists.
+REM  - Scales wallpapers/*.jpg to wallpapers-thumb/ (2560px, q85).
+REM  - Incremental: skips already-resized images.
 REM  ASCII-only in this .bat (node prints Chinese itself).
 REM ============================================================
 
@@ -18,21 +18,23 @@ if errorlevel 1 (
   echo.
   echo [wallpaper] Node.js not found.
   echo [wallpaper] Please install Node.js LTS ^(v18+^) from https://nodejs.org
-  echo [wallpaper] Then run setup.bat again.
+  echo [wallpaper] Then run resize.bat again.
   echo.
   pause
   exit /b 1
 )
 
-echo [wallpaper] Node.js found. Running setup ...
+echo [wallpaper] Node.js found. Resizing ...
 echo.
-node "%~dp0lib\setup.cjs"
+REM  Project root = parent of this script's dir (bin/ lives under root)
+set "WP_ROOT=%~dp0.."
+node "%WP_ROOT%\lib\resize.cjs"
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (
-  echo [wallpaper] Setup finished successfully.
+  echo [wallpaper] Resize finished successfully.
 ) else (
-  echo [wallpaper] Setup reported an issue ^(rc=%rc%^).
+  echo [wallpaper] Resize reported an issue ^(rc=%rc%^).
 )
 pause
 endlocal
