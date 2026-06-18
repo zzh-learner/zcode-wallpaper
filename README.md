@@ -13,6 +13,7 @@
 - **图片壁纸**：从壁纸库随机选一张，同一次会话内固定。
 - **视频壁纸**：把 `.mp4` / `.webm` / `.mov` 注入成动态背景，`autoplay muted loop` 自动循环播放。
 - **窗口透明**：把 ZCode 主窗口设成半透明（0-100 自选），能透过窗口看到桌面。和图片/视频可叠加（半透明窗口 + 里面有壁纸）。
+- **小说阅读器**：在 ZCode 浏览器面板里看本地 `.txt` 小说，两级目录（卷/章）、滚动阅读、书架多本、进度记忆。
 - **批量缩图**：相机原图（几十 MB）自动缩到可渲染的大小，增量处理、重复跑很快。
 - **一键移除**：撤掉已注入的壁纸，立即恢复默认外观（同时清掉图片 `<style>` 和视频 `<video>`）。
 - **跨电脑可用**：不包含任何本机专属信息，clone 到任意 Windows 电脑按下方流程跑一遍即可。
@@ -130,6 +131,32 @@ bin\transparent.bat -ProcessName <真实名>
 菜单选 `5 移除壁纸`，当前会话立即恢复默认外观。
 **一个移除命令同时清掉图片 `<style>` 和视频 `<video>`**，不用记自己用了哪个模式。
 
+## 6. 小说阅读器（边写边看）
+
+第四种能力，和前三种**完全独立**：不注入 CSS、不改窗口透明度，而是启动一个本地
+HTTP 服务，在 ZCode 自带的**浏览器面板**里打开一个阅读器网页。不影响 ZCode 主界面。
+
+### 用法
+
+1. 把 `.txt` 小说放进 **`novels/`**（`.gitignore` 已忽略，私人内容不提交）
+2. 双击 `wallpaper.bat`，选 **`11 启动小说阅读器`**（或直接双击 `bin/reader-server.bat`）
+3. 服务启动后 URL 自动复制到剪贴板
+4. 在 ZCode 右侧**浏览器面板**粘贴 URL 回车（面板和编辑器并排，可拖分割条调宽窄）
+5. 从书架选书，或直接把 `.txt` 拖进阅读区
+
+### 功能
+
+- 两级目录（卷/章），2000+ 章可滚动，当前章高亮
+- 滚动阅读，←/→ 翻章，滚到底预取下一章
+- 书架多本管理，每本独立进度（章 + 章内位置）
+- 字号（A−/A+）、主题（🌙/☀/📜 三个循环）、编码手动切换（UTF-8/GB18030/自动）
+- GB18030 自动识别（中文 txt 无 BOM 是常态）
+
+### 编码
+
+中文 `.txt` 多是 GB18030 编码（无 BOM）。阅读器自动检测：BOM → 严格 UTF-8 验证 →
+GB18030 兜底。识别可疑的书带 ⚠️ 标记，顶栏可手动切编码。
+
 ## 进阶：改样式
 
 - **图片壁纸**：改 `lib/wallpaper.css`（全屏透明模式，把 UI 背景变量强制透明让壁纸透出）
@@ -154,15 +181,21 @@ bin\transparent.bat -ProcessName <真实名>
 | `bin/start-transparent.bat` | 启动 ZCode 并设窗口透明（调 `launch-zcode` + `transparent.bat`） |
 | `bin/transparent.bat` | 把已运行的 ZCode 主窗口设半透明（提示输入透明度 0-100） |
 | `bin/remove-wallpaper.bat` | 移除壁纸（同时清图片 + 视频） |
+| `bin/reader-server.bat` | 启动小说阅读器服务（常驻，关窗即停） |
 | `bin/probe.ps1` | 调试端口探测（`start-zcode` / `inject-only` 共用） |
 | `lib/inject.cjs` | CDP 连接 + 注入逻辑（图片 / 视频 / 移除三种模式） |
 | `lib/transparent.ps1` | Win32 窗口透明（探测主窗口 + `SetLayeredWindowAttributes` 设 alpha） |
 | `lib/windowselect.cjs` | 窗口选择规则纯函数（`transparent.ps1` 的 JS 镜像，供单测） |
+| `lib/reader-server.cjs` | 阅读器 HTTP server（扫 novels/、章节切分、API、端口自增、剪贴板） |
+| `lib/reader-codec.cjs` | 编码检测（BOM/fatal-UTF8/GB18030，server 端） |
+| `lib/reader-toc.cjs` | 章节切分（卷/章正则 + 兜底，server 端） |
 | `lib/wallpaper.css` | 图片壁纸样式 |
 | `lib/wallpaper-video.css` | 视频壁纸样式（视频层定位 + 透明 UI 层） |
+| `reader/` | 阅读器前端 SPA（HTML/CSS/JS，双模式：server fetch / 拖拽兜底） |
 | `wallpapers/` | **放你的原图**（`.gitignore` 已忽略） |
 | `wallpapers-thumb/` | 缩图产物（inject 实际读这里，`.gitignore` 已忽略） |
 | `wallpapers-video/` | **放你的视频**（`.gitignore` 已忽略） |
+| `novels/` | **放你的 .txt 小说**（`.gitignore` 已忽略） |
 
 ## 命令行 / npm 脚本
 
@@ -172,6 +205,7 @@ bin\transparent.bat -ProcessName <真实名>
 npm run inject          # 注入图片壁纸（随机选图）
 npm run inject:video    # 注入视频壁纸（随机选视频）
 npm run remove          # 移除壁纸（图片 + 视频都清）
+npm run reader          # 启动小说阅读器服务（常驻，Ctrl+C 停）
 npm test                # 跑全部测试
 ```
 
@@ -190,6 +224,11 @@ npm test                # 跑全部测试
 | 窗口透明"没找到进程" | 默认按进程名 `ZCode` 找。用 `Get-Process` 看真实名，再 `bin\transparent.bat -ProcessName <真实名>` |
 | 窗口透明看不到效果 | 透明度调太低（如 0-20）字也几乎看不见。调高到 60-80 试试。改透明度重跑场景 9/10 |
 | 侧边栏有一块深色盖住背景 | ZCode 框架硬画的实色背景，不走任何覆盖的 CSS 变量，CSS 改不动。已知遗留 |
+| 阅读器打不开 | 确认服务窗口还开着；URL 端口对（端口冲突会自动 +1，看服务窗口打印的实际端口）；直接双击 `bin/reader-server.bat` 看输出 |
+| 阅读器书架空 | 刷新 webview 标签（F5）；确认服务窗口还开着、`novels/` 有 `.txt`；服务启动后新加的书要重启服务才扫到 |
+| 阅读器乱码 | 顶栏编码下拉手动切 UTF-8/GB18030；带 ⚠️ 的书自动检测可疑 |
+| 阅读器进度丢了 | webview 的 localStorage 在 persist partition 下应持久；ZCode 重装/清缓存会丢。书架里旧条目会显示"重新拖入关联" |
+| 阅读器章节识别错 | 按"第X章"独占行切分。非此格式的书整文当一章显示。最后一章可能吞掉后记/番外（无标题被并入） |
 | ZCode 升级后壁纸没了 | 正常，升级会换 app.asar 但不影响本工具。重跑 `start-zcode` 即可 |
 
 ## 安全说明
