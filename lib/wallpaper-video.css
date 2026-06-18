@@ -1,0 +1,71 @@
+/* ============================================================
+   ZCode 视频壁纸 CSS —— 与 wallpaper.css 配对，由 CDP 注入
+   ============================================================
+   原理（视频全屏模式）：
+   1. 壁纸是一个真实的 <video> 元素（id=zcode-user-wallpaper-video），
+      铺满视口、固定在屏幕，z-index 压到最底层。CSS background-image
+      播不了视频，所以这里必须用 DOM 元素。
+   2. <video> 的 src 由 inject.cjs 启动时从 wallpapers-video/ 随机
+      选一个 mp4 并动态 setAttribute('src', ...)，文件名不放 CSS。
+   3. 复用 wallpaper.css 的"全屏透明"层：把 UI 背景变量/Tailwind 背景
+      类强制 transparent，让 <video> 从底层透出。
+   4. html 和 body 自身的背景清空，避免在 <video> 之上盖一层实色。
+
+   为什么放在固定位置而不是 body 子元素的某个容器？
+      body 的 background 是图像模式的挂载点；视频模式没有 body 背景图
+      （CSS 播不了），只能放一个独立元素。position:fixed 让它不随页面
+      滚动；z-index:-100 让它沉到所有 UI 之下；object-fit:cover 让视频
+      始终铺满（无论宽高比，可能裁切边缘，这是视频壁纸的常规取舍）。
+
+   为什么 html 也要 transparent？
+      Electron 窗口默认 html/body 不透明；不清掉就会盖住 z-index:-100
+      的视频层。和图像模式清掉 body backgroundColor 是同一个道理。
+
+   可读性怎么办？
+      和图像模式一样：字直接压在视频上。视频每帧在动，可读性比静态
+      图片更挑——选构图简洁、色调偏暗、主体居中的视频效果最好。
+      CSS 这层无能为力，只能靠选片。
+
+   已知遗留：侧边栏有一块实色深色背景是 ZCode 框架硬画的（不走任何
+   我们覆盖的变量/Tailwind 类），会盖住视频。图像模式同样的坑，
+   见 AGENTS.md 核心教训 2 的"已知遗留"。要彻底搞定只能从 JS 层
+   在侧边栏元素上做运行时覆盖——是个新坑，别默认 CSS 全搞定了。
+   ============================================================ */
+
+/* 1) 视频层：铺满视口、固定、沉到最底 */
+#zcode-user-wallpaper-video {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  object-fit: cover !important; /* 等比铺满，可能裁边 */
+  z-index: -100 !important;     /* 沉到所有 UI 之下 */
+  pointer-events: none !important; /* 不抢鼠标，让 UI 正常响应 */
+  background: #000 !important;  /* 视频加载前的底色 */
+}
+
+/* 2) 清掉 html/body 自身的背景，别在视频层之上盖实色。
+      （wallpaper.css 的 body 规则会进一步处理 background-size 等，
+       这里只兜底 backgroundColor，让视频能透出来。） */
+html,
+body {
+  background-color: transparent !important;
+}
+
+/* 3) 兜底：和 wallpaper.css 一样，把 UI 背景变量/Tailwind 类清空，
+      让代码区/侧边栏/面板透出底层视频。图像模式的同款规则，
+      这里重复声明以保证视频模式单独注入时也生效。 */
+.theme-zai-dark,
+.theme-zai-light {
+  --color-background: transparent !important;
+  --color-background-alt: transparent !important;
+  --color-background-win-alt: transparent !important;
+}
+
+.bg-background,
+.bg-background-alt,
+.bg-background-win-alt,
+.bg-surface {
+  background-color: transparent !important;
+}

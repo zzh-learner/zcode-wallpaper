@@ -8,6 +8,7 @@ const path = require("path");
 let lastInjectedCss = null;
 let injectedState = false; // tracks whether the mock "page" currently has the wallpaper style
 let removeCalled = false;
+let lastExpression = ""; // the most recent non-verify evaluate expression (for video assertions)
 
 const mockHttp = http.createServer((req, res) => {
   if (req.url === "/json/version") {
@@ -45,8 +46,11 @@ wss.on("connection", (ws) => {
     if (msg.method === "Runtime.evaluate") {
       const expr = msg.params.expression;
       // Verify probe (inject.cjs sends this to confirm the change took effect).
-      if (expr.includes("'noeffect'") || expr.includes("'present' : 'gone'")) {
-        const isRemoveVerify = expr.includes("'present' : 'gone'");
+      // Match the remove-verify sentinels regardless of internal whitespace
+      // ('present' : 'gone' vs 'present':'gone') so the mock doesn't break on
+      // cosmetic formatting changes to verifyExpression().
+      const isRemoveVerify = /'present'\s*:\s*'gone'/.test(expr);
+      if (expr.includes("'noeffect'") || isRemoveVerify) {
         const value = isRemoveVerify
           ? (injectedState ? "present" : "gone")
           : (injectedState ? "effect" : "noeffect");
@@ -54,7 +58,11 @@ wss.on("connection", (ws) => {
         return;
       }
       // The inject/remove action expression itself.
-      const isRemove = expr.includes("return 'removed'");
+      // Match the remove sentinel regardless of exact phrasing: the old
+      // expression was `return 'removed'`, the current one is
+      // `return did?'removed':'none'`. Both contain "'removed'" as a literal
+      // the image/video inject expressions never produce.
+      const isRemove = expr.includes("'removed'");
       let value;
       if (isRemove) {
         value = injectedState ? "removed" : "none";
@@ -63,6 +71,7 @@ wss.on("connection", (ws) => {
       } else {
         injectedState = true; // mark "something was injected"
         lastInjectedCss = true;
+        lastExpression = expr; // keep for the video-mode assertion below
         value = "ok";
       }
       ws.send(JSON.stringify({ id: msg.id, result: { result: { type: "string", value } } }));
@@ -80,11 +89,18 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
   const execFileP = promisify(execFile);
   let pass = 0,
     fail = 0;
-  const run = async (label, args, expectInStdout) => {
+  function check(name, cond) {
+    console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + name);
+    cond ? pass++ : fail++;
+  }
+  const run = async (label, args, expectInStdout) => runEnv(label, args, {}, expectInStdout);
+  // runEnv: like run but merges extraEnv into the child process env (used to
+  // set ZCODE_WP_VIDEO for the video-mode test without polluting other runs).
+  const runEnv = async (label, args, extraEnv, expectInStdout) => {
     try {
       const { stdout } = await execFileP(process.execPath, ["lib/inject.cjs", ...args], {
         cwd: path.join(__dirname, ".."),
-        env: { ...process.env, ZCODE_DEBUG_PORT: "9998" },
+        env: { ...process.env, ZCODE_DEBUG_PORT: "9998", ...extraEnv },
         encoding: "utf8",
       });
       const ok = expectInStdout.every((s) => stdout.includes(s));
@@ -105,6 +121,33 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
   await run("list targets", ["--list"], ["ZCode (mock)", "页面目标"]);
   // 3. remove (after inject, mock should report the style gone)
   await run("remove via mock CDP", ["--remove"], ["生效", "影响窗口 1"]);
+
+  // 4. inject VIDEO mode. ZCODE_WP_VIDEO points the bypass at a fake path
+  //    (inject.cjs doesn't stat it -- it only builds the file URL). The mock
+  //    handles this identically to image inject because the video expression
+  //    returns 'ok' and its verify probe uses the same 'noeffect'/'effect'
+  //    sentinels the mock already recognizes.
+  lastExpression = ""; // reset so we can assert on the video expression specifically
+  await runEnv(
+    "inject video via mock CDP",
+    ["--video"],
+    { ZCODE_WP_VIDEO: "C:\\fake\\clip.mp4" },
+    ["生效", "影响窗口 1"]
+  );
+
+  // Video-specific assertion: the expression the mock received must actually
+  // be the video builder's output (a real <video> element + the chosen URL),
+  // not the image builder's. Guards against MODE routing regressions.
+  check("video: mock received <video> element creation", lastExpression.indexOf("createElement('video')") !== -1);
+  check("video: mock received the chosen src url", lastExpression.indexOf("clip.mp4") !== -1);
+  // The image builder appends "body { background-image: url(" at runtime;
+  // the video builder never does (it sets <video src> instead). Note we check
+  // for that specific appended rule, NOT the bare word "background-image",
+  // which also appears inside the CSS comments embedded in textContent.
+  check(
+    "video: mock did NOT receive image background-image url rule",
+    lastExpression.indexOf("body { background-image: url(") === -1
+  );
 
   console.log("\n[mock] " + pass + " passed, " + fail + " failed.");
   console.log("[mock] an inject was received:", !!lastInjectedCss);

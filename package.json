@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "inject": "node lib/inject.cjs",
+    "inject:video": "node lib/inject.cjs --video",
     "remove": "node lib/inject.cjs --remove",
     "setup": "node lib/setup.cjs",
     "test": "node test/selftest.cjs && node test/cdp-mock-test.cjs && node test/cdp-retry-test.cjs && node test/setuptest.cjs && node test/resizetest.cjs && node test/probetest.cjs && node test/menutest.cjs"

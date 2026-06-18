@@ -12,6 +12,11 @@ REM  Project root = parent of this script's dir (bin/ lives under root).
 set "WP_ROOT=%~dp0.."
 set "DEBUG_PORT=9222"
 
+REM  Optional arg "video" switches to video wallpaper (passes --video to
+REM  inject.cjs). No arg = image wallpaper (backward compatible).
+set "MODE_FLAG="
+if /i "%~1"=="video" set "MODE_FLAG=--video"
+
 echo [wallpaper] Probing debug port %DEBUG_PORT% ...
 set /a tries=0
 :probe
@@ -41,7 +46,7 @@ exit /b 1
 
 :inject
 echo [wallpaper] Port ready. Injecting wallpaper...
-node "%WP_ROOT%\lib\inject.cjs"
+node "%WP_ROOT%\lib\inject.cjs" %MODE_FLAG%
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (
