@@ -13,11 +13,16 @@ REM
 REM  Dispatch rules:
 REM  - Combo scenarios (1, 3) call node lib/xxx.cjs directly to skip
 REM    the pause that each sub-.bat would force mid-combo.
-REM  - Single-script scenarios (2, 4, 5, 6, 7, 8) `call` the sub-.bat so its
+REM  - Single-script scenarios (2, 4, 5, 6, 7, 8, 9, 10) `call` the sub-.bat so its
 REM    own pause still lets the user read output before returning.
 REM  - Scenarios 7 & 8 are the video-wallpaper variants of 2 & 4: they pass
 REM    the literal arg "video" to start-zcode.bat / inject-only.bat, which
 REM    forwards it as --video to inject.cjs (image mode by default otherwise).
+REM  - Scenarios 9 & 10 are the WINDOW-TRANSPARENT mode (not wallpaper):
+REM    9 = start-transparent.bat (launch ZCode then make window translucent),
+REM    10 = transparent.bat (ZCode already running). Transparent is a Win32
+REM    window-layer feature, does NOT use CDP - independent subsystem from
+REM    the image/video wallpaper injection. See AGENTS.md "窗口透明模式".
 REM  - Scenario 1's last step `call`s start-zcode.bat (does NOT copy
 REM    its probe+inject logic — see AGENTS.md "don't duplicate").
 REM  - Each node-direct step checks errorlevel; on failure we stop and
@@ -54,7 +59,7 @@ cls
 node "%WP_DIR%\lib\menu.cjs"
 echo.
 set "choice="
-set /p "choice=Enter choice (0-8): "
+set /p "choice=Enter choice (0-10): "
 if not defined choice goto menu
 
 if "%choice%"=="1" goto scene_init
@@ -65,6 +70,8 @@ if "%choice%"=="5" goto scene_remove
 if "%choice%"=="6" goto scene_setup
 if "%choice%"=="7" goto scene_start_video
 if "%choice%"=="8" goto scene_inject_video
+if "%choice%"=="9" goto scene_start_transparent
+if "%choice%"=="10" goto scene_transparent
 if "%choice%"=="0" goto :eof
 goto menu
 
@@ -129,4 +136,14 @@ goto menu
 REM ---------- Scenario 8: inject-only video wallpaper ----------
 :scene_inject_video
 call "%WP_DIR%\bin\inject-only.bat" video
+goto menu
+
+REM ---------- Scenario 9: start-transparent (launch + translucent) ----------
+:scene_start_transparent
+call "%WP_DIR%\bin\start-transparent.bat"
+goto menu
+
+REM ---------- Scenario 10: transparent (ZCode already running) ----------
+:scene_transparent
+call "%WP_DIR%\bin\transparent.bat"
 goto menu
