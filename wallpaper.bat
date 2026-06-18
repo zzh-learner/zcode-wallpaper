@@ -23,6 +23,11 @@ REM    9 = start-transparent.bat (launch ZCode then make window translucent),
 REM    10 = transparent.bat (ZCode already running). Transparent is a Win32
 REM    window-layer feature, does NOT use CDP - independent subsystem from
 REM    the image/video wallpaper injection. See AGENTS.md "窗口透明模式".
+REM  - Scenarios 11 & 12 are the NOVEL-READER subsystem (4th, independent of
+REM    wallpaper/transparent): 11 = reader-server.bat (start the persistent
+REM    HTTP server that serves the reader SPA + /api from novels/*.txt),
+REM    12 = print usage help (no server start). Reader runs in ZCode's built-in
+REM    browser webview panel, not via CDP. See AGENTS.md "小说阅读器".
 REM  - Scenario 1's last step `call`s start-zcode.bat (does NOT copy
 REM    its probe+inject logic — see AGENTS.md "don't duplicate").
 REM  - Each node-direct step checks errorlevel; on failure we stop and
@@ -59,7 +64,7 @@ cls
 node "%WP_DIR%\lib\menu.cjs"
 echo.
 set "choice="
-set /p "choice=Enter choice (0-10): "
+set /p "choice=Enter choice (0-12): "
 if not defined choice goto menu
 
 if "%choice%"=="1" goto scene_init
@@ -72,6 +77,8 @@ if "%choice%"=="7" goto scene_start_video
 if "%choice%"=="8" goto scene_inject_video
 if "%choice%"=="9" goto scene_start_transparent
 if "%choice%"=="10" goto scene_transparent
+if "%choice%"=="11" goto scene_reader_server
+if "%choice%"=="12" goto scene_reader_help
 if "%choice%"=="0" goto :eof
 goto menu
 
@@ -146,4 +153,15 @@ goto menu
 REM ---------- Scenario 10: transparent (ZCode already running) ----------
 :scene_transparent
 call "%WP_DIR%\bin\transparent.bat"
+goto menu
+
+REM ---------- Scenario 11: reader-server (start persistent HTTP server) ----------
+:scene_reader_server
+call "%WP_DIR%\bin\reader-server.bat"
+goto menu
+
+REM ---------- Scenario 12: reader help (print usage, no server start) ----------
+:scene_reader_help
+node -e "var s=['小说阅读器使用说明：','','1. 启动：选场景 11（或直接双击 bin/reader-server.bat）','2. 把 .txt 放进 novels/ 目录','3. 启动后 URL 自动复制到剪贴板','4. 在 ZCode 右侧浏览器面板粘贴回车','5. 从书架选书，或直接拖 .txt 进面板','6. 关闭服务窗口即停止','','快捷键：←/→ 翻章，滚轮滚正文','字号 A−/A+，主题 🌙/☀/📜 三个循环']; console.log(s.join('\n'));"
+pause
 goto menu
