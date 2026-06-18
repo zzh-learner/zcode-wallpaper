@@ -45,3 +45,8 @@ Desktop.ini
 # create a literal file named `nul` instead of hitting the NUL device.
 # Never commit it; clean it up locally when it appears.
 nul
+
+# Novel text files (private content, never commit).
+# Add your .txt to novels/ (ignored below) — same privacy rule as wallpapers/.
+novels/*
+!novels/.gitkeep
