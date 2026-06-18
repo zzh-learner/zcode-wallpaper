@@ -30,3 +30,8 @@ Desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# Windows reserved device name: `>nul` / `2>nul` redirects run from Git Bash
+# create a literal file named `nul` instead of hitting the NUL device.
+# Never commit it; clean it up locally when it appears.
+nul
