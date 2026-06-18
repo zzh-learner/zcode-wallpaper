@@ -27,6 +27,10 @@ function splitParagraphs(chunk) {
   return chunk.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
 }
 
+// Expose: CommonJS (Node test) + browser global (reader.js/book.js use window.__readerToc).
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { parseTOC, splitParagraphs, VOLUME_RE, CHAPTER_RE };
+}
+if (typeof window !== "undefined") {
+  window.__readerToc = { parseTOC, splitParagraphs };
 }

@@ -30,6 +30,10 @@ function decodeText(bytes, overrideLabel) {
 }
 
 // UMD-ish: works as CommonJS (test) and as a browser global/module.
+// Browser global is REQUIRED — reader.js/book.js reference window.__readerCodec.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { detectEncoding, decodeText, tryDecode };
+}
+if (typeof window !== "undefined") {
+  window.__readerCodec = { detectEncoding, decodeText, tryDecode };
 }

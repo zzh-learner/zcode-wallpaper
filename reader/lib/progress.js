@@ -48,6 +48,14 @@ function addToShelf(entry) {
   return v;
 }
 
+// Expose: CommonJS for Node tests, AND a browser global for reader.js/book.js
+// (which reference window.__readerProgress). Both must work — the test files
+// require() this module (Node), while the browser loads it via <script> and
+// needs the global. See Task 3/4/5 fix: codec/toc/progress originally only
+// exported CommonJS, so browser globals were undefined -> renderShelf crashed.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { saveProgress, loadProgress, getShelf, addToShelf, clamp01, PROGRESS_PREFIX, SHELF_KEY };
+}
+if (typeof window !== "undefined") {
+  window.__readerProgress = { saveProgress, loadProgress, getShelf, addToShelf };
 }
