@@ -71,15 +71,35 @@ PowerShell 的 `.Count` 陷阱：当 `Where-Object` 只返回**单个对象**时
    才发现的——跑出来 `.Count` 是空，瞬间定位。比看一百遍代码都有用。
 5. **PowerShell 单对象 `.Count` 是 null。** 写 `Where-Object` 结果要数数量，永远包 `@(...)`。
 
+### 二次事故（2026-06）：同一个 bug，第二个文件没修
+
+第一次只改了 `start-zcode.bat`（第 52 行加 `@()`），**漏了 `inject-only.bat` 的同一段探测逻辑**。
+用户"一直启动着 ZCode"（单窗口 = 单 page target = 正好触发单对象陷阱），双击 inject-only.bat，
+输出 `Could not reach ZCode debug port after 30 tries` + `Port is open but no page window yet`（rc=2），
+inject.cjs 再次完全没被调用。
+
+**修复**：把探测逻辑抽成共享的 `probe.ps1`（带 `@()` 包裹），两个 `.bat` 都 `-File probe.ps1` 调它。
+**根除重复**才是防再次发生的办法——两份拷贝就是两份能各自再坏一次的机会。
+
+教训补丁：
+6. **修一个 bug 时 grep 全代码库的同型写法。** "这段逻辑别处还有吗"必问。
+7. **回归测试要测到出错的那个组件边界。** `cdp-retry-test` 测 inject.cjs 内部，抓不到 `.bat` 探测行；
+   `probetest` 直接跑 `probe.ps1` 才钉死。测错层 = 没测。
+
 ---
 
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest。
-26 项。改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest。
+30 项。改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
-`cdp-retry-test.cjs` 是为这次事故加的回归测试：mock 故意拒掉前 3 次 WS 握手，
+`cdp-retry-test.cjs` 是为第一次事故加的回归测试：mock 故意拒掉前 3 次 WS 握手，
 验证 inject.cjs 的 retry 能恢复。模拟冷启动握手失败场景。
+**注意**：它只覆盖 inject.cjs 内部，不覆盖 `.bat` 的探测行——见下面 `probetest`。
+
+`probetest.cjs` 是为**第二次同型事故**加的（见下）：起一个 mock `/json`，
+用单 page target / 多 page target / 无 page target / 端口不通四种 case 跑 `probe.ps1`，
+验证退出码 0/0/2/1。专门钉死 PowerShell `.Count` 单对象陷阱。
 
 ## 改动惯例
 

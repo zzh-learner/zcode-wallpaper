@@ -16,7 +16,7 @@
     "inject": "node inject.cjs",
     "remove": "node inject.cjs --remove",
     "setup": "node setup.cjs",
-    "test": "node selftest.cjs && node cdp-mock-test.cjs && node cdp-retry-test.cjs && node setuptest.cjs && node resizetest.cjs"
+    "test": "node selftest.cjs && node cdp-mock-test.cjs && node cdp-retry-test.cjs && node setuptest.cjs && node resizetest.cjs && node probetest.cjs"
   },
   "dependencies": {
     "sharp": "^0.35.1",

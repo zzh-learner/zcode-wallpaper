@@ -16,7 +16,7 @@ echo [wallpaper] Probing debug port %DEBUG_PORT% ...
 set /a tries=0
 :probe
 set /a tries+=1
-powershell -NoProfile -Command "try{$r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:%DEBUG_PORT%/json' -TimeoutSec 2;$t=$r.Content|ConvertFrom-Json;if(($t|Where-Object {$_.type -eq 'page'}).Count -gt 0){exit 0}else{exit 2}}catch{exit 1}" >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%WP_DIR%\probe.ps1" -Port %DEBUG_PORT% >nul 2>nul
 set rc=%errorlevel%
 if "%rc%"=="0" goto inject
 if %tries% lss 30 (
