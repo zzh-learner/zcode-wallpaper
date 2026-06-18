@@ -189,7 +189,8 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("2 volumes detected", r.volumes.length === 2);
   check("3 chapters detected", r.chapters.length === 3);
   check("volume 1 points at chapter 0", r.volumes[0].startChapterIndex === 0);
-  check("volume 2 points at chapter 1", r.volumes[1].startChapterIndex === 1); // ch0=v1, ch1=ch2
+  // v1 covers ch0(山边小村)+ch1(青牛镇); v2 starts at ch2(嘉元城) -> index 2
+  check("volume 2 points at chapter 2", r.volumes[1].startChapterIndex === 2);
   // ch0 spans from its start to ch1 start
   check("ch0 endOffset == ch1 startOffset", r.chapters[0].endOffset === r.chapters[1].startOffset);
   // last chapter endOffset == text.length
