@@ -15,8 +15,9 @@ REM  - No interactive prompts; everything automatic.
 REM  ASCII-only in this .bat (node prints Chinese itself).
 REM ============================================================
 
-set "WP_DIR=%~dp0"
-set "WP_DIR=%WP_DIR:~0,-1%"
+REM  Project root = parent of this script's dir (bin/ lives under root).
+REM  Used to locate lib/ (at root) and the launch log (written to root).
+set "WP_ROOT=%~dp0.."
 set "DEBUG_PORT=9222"
 set "ZCODE_EXE="
 
@@ -42,14 +43,14 @@ if not errorlevel 1 (
 )
 
 echo [wallpaper] Step 2: launch ZCode with debug port %DEBUG_PORT% (output to zcode-launch.log)
-powershell -NoProfile -Command "$psi=New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName='%ZCODE_EXE%'; $psi.Arguments='--remote-debugging-port=%DEBUG_PORT%'; $psi.UseShellExecute=$false; $psi.RedirectStandardOutput=$true; $psi.RedirectStandardError=$true; $p=[System.Diagnostics.Process]::Start($psi); $log='%WP_DIR%\zcode-launch.log'; '' | Out-File -LiteralPath $log -Encoding utf8; Register-ObjectEvent -InputObject $p -EventName OutputDataReceived -Action { if($EventArgs.Data){ Add-Content -LiteralPath $log -Value $EventArgs.Data } } | Out-Null; Register-ObjectEvent -InputObject $p -EventName ErrorDataReceived -Action { if($EventArgs.Data){ Add-Content -LiteralPath $log -Value $EventArgs.Data } } | Out-Null; $p.BeginOutputReadLine(); $p.BeginErrorReadLine(); Write-Output ('  PID:'+$p.Id)"
+powershell -NoProfile -Command "$psi=New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName='%ZCODE_EXE%'; $psi.Arguments='--remote-debugging-port=%DEBUG_PORT%'; $psi.UseShellExecute=$false; $psi.RedirectStandardOutput=$true; $psi.RedirectStandardError=$true; $p=[System.Diagnostics.Process]::Start($psi); $log='%WP_ROOT%\zcode-launch.log'; '' | Out-File -LiteralPath $log -Encoding utf8; Register-ObjectEvent -InputObject $p -EventName OutputDataReceived -Action { if($EventArgs.Data){ Add-Content -LiteralPath $log -Value $EventArgs.Data } } | Out-Null; Register-ObjectEvent -InputObject $p -EventName ErrorDataReceived -Action { if($EventArgs.Data){ Add-Content -LiteralPath $log -Value $EventArgs.Data } } | Out-Null; $p.BeginOutputReadLine(); $p.BeginErrorReadLine(); Write-Output ('  PID:'+$p.Id)"
 echo [wallpaper]   Started. Waiting for the window to be ready...
 
 echo [wallpaper] Step 3: wait for the debug port + a page target
 set /a tries=0
 :wait_ready
 set /a tries+=1
-powershell -NoProfile -ExecutionPolicy Bypass -File "%WP_DIR%\probe.ps1" -Port %DEBUG_PORT% >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0probe.ps1" -Port %DEBUG_PORT% >nul 2>nul
 set rc=!errorlevel!
 if "!rc!"=="0" goto inject
 if %tries% lss 40 (
@@ -64,7 +65,7 @@ goto :hold
 
 :inject
 echo [wallpaper] Step 4: inject wallpaper ^(window ready after %tries% tries^)
-node "%WP_DIR%\lib\inject.cjs"
+node "%WP_ROOT%\lib\inject.cjs"
 set rc=!errorlevel!
 echo.
 if "!rc!"=="0" (

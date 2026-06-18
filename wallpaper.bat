@@ -80,12 +80,12 @@ if errorlevel 1 (
   goto menu
 )
 echo [wallpaper] Step 3/3: start ZCode with wallpaper ...
-call "%WP_DIR%\start-zcode.bat"
+call "%WP_DIR%\bin\start-zcode.bat"
 goto menu
 
 REM ---------- Scenario 2: start-zcode ----------
 :scene_start
-call "%WP_DIR%\start-zcode.bat"
+call "%WP_DIR%\bin\start-zcode.bat"
 goto menu
 
 REM ---------- Scenario 3: resize + inject-only ----------
@@ -98,20 +98,20 @@ if errorlevel 1 (
   goto menu
 )
 echo [wallpaper] Step 2/2: inject ...
-call "%WP_DIR%\inject-only.bat"
+call "%WP_DIR%\bin\inject-only.bat"
 goto menu
 
 REM ---------- Scenario 4: inject-only ----------
 :scene_inject_only
-call "%WP_DIR%\inject-only.bat"
+call "%WP_DIR%\bin\inject-only.bat"
 goto menu
 
 REM ---------- Scenario 5: remove-wallpaper ----------
 :scene_remove
-call "%WP_DIR%\remove-wallpaper.bat"
+call "%WP_DIR%\bin\remove-wallpaper.bat"
 goto menu
 
 REM ---------- Scenario 6: setup ----------
 :scene_setup
-call "%WP_DIR%\setup.bat"
+call "%WP_DIR%\bin\setup.bat"
 goto menu

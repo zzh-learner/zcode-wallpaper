@@ -8,15 +8,15 @@ REM
 REM  Run this AFTER start-zcode.bat, once the ZCode window is open.
 REM  ASCII-only on purpose (cmd.exe OEM codepage parsing).
 
-set "WP_DIR=%~dp0"
-set "WP_DIR=%WP_DIR:~0,-1%"
+REM  Project root = parent of this script's dir (bin/ lives under root).
+set "WP_ROOT=%~dp0.."
 set "DEBUG_PORT=9222"
 
 echo [wallpaper] Probing debug port %DEBUG_PORT% ...
 set /a tries=0
 :probe
 set /a tries+=1
-powershell -NoProfile -ExecutionPolicy Bypass -File "%WP_DIR%\probe.ps1" -Port %DEBUG_PORT% >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0probe.ps1" -Port %DEBUG_PORT% >nul 2>nul
 set rc=%errorlevel%
 if "%rc%"=="0" goto inject
 if %tries% lss 30 (
@@ -41,7 +41,7 @@ exit /b 1
 
 :inject
 echo [wallpaper] Port ready. Injecting wallpaper...
-node "%WP_DIR%\lib\inject.cjs"
+node "%WP_ROOT%\lib\inject.cjs"
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (

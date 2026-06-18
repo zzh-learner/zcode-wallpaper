@@ -10,14 +10,19 @@
 启动链路（关键，调试时按这个顺序看）：
 
 ```
-wallpaper.bat                 总入口菜单：场景化选择（新机器初始化 / 日常启动 / 换图重注入
-                              / 只重注入 / 移除 / 重装依赖），按场景调下面这些脚本，跑完回菜单。
-                              本身是 ASCII-only 的 cmd 循环，中文菜单由 lib/menu.cjs 打印。
-setup.bat  → setup.cjs        装 sharp/ws 依赖
-resize.bat → resize.cjs        wallpapers/*.jpg → wallpapers-thumb/*.jpg（2560px 缩图）
-start-zcode.bat               启动 ZCode(带 debug port) → 等待 page target → 调 inject.cjs
-inject.cjs                    CDP 连接 → Runtime.evaluate 注入 wallpaper.css
+wallpaper.bat                 总入口菜单（根目录）：场景化选择（新机器初始化 / 日常启动 / 换图重注入
+                              / 只重注入 / 移除 / 重装依赖），按场景调 bin/ 下的脚本，跑完回菜单。
+                              ASCII-only cmd 循环，中文菜单由 lib/menu.cjs 打印。
+bin/setup.bat  → lib/setup.cjs        装 sharp/ws 依赖
+bin/resize.bat → lib/resize.cjs        wallpapers/*.jpg → wallpapers-thumb/*.jpg（2560px 缩图）
+bin/start-zcode.bat           启动 ZCode(带 debug port) → 等待 page target → 调 lib/inject.cjs
+lib/inject.cjs                CDP 连接 → Runtime.evaluate 注入 wallpaper.css
+bin/probe.ps1                 start-zcode/inject-only 共用的 debug-port 探测（同目录调用，见 bin/ 下两个 .bat）
 ```
+
+**路径约定**：`wallpaper.bat` 留在根目录当唯一双击入口；5 个辅助 `.bat` 和 `probe.ps1` 都在
+`bin/` 下。每个 `bin/*.bat` 开头算出项目根 `set "WP_ROOT=%~dp0.."`，用它定位根下的 `lib/`；
+`probe.ps1` 用 `%~dp0probe.ps1` 同目录调用。改这些 `.bat` 的路径定位时别破坏这个约定。
 
 **这是一条命令链，每环的输出是下一环的输入。出问题时，先确认到底断在哪一环，别默认后面的环被调用了。**
 
