@@ -92,7 +92,7 @@ cd zcode-wallpaper
 | `setup.bat` | 初始化：检查环境 + 准备目录 + 装依赖 |
 | `resize.bat` | 把 `wallpapers/` 原图批量缩到 `wallpapers-thumb/` |
 | `start-zcode.bat` | 启动带壁纸的 ZCode（一键完成启动+注入） |
-| `inject-only.bat` | 单独注入壁纸（改完 CSS 后用，无需重启） |
+| `inject-only.bat` | 单独注入壁纸（改完 CSS 后用，**需要 ZCode 已通过 `start-zcode.bat` 开着**） |
 | `remove-wallpaper.bat` | 移除壁纸 |
 | `wallpaper.css` | 壁纸样式（透明度/模糊在这调） |
 | `wallpapers/` | **放你的原图**（`.gitignore` 已忽略） |
@@ -103,6 +103,7 @@ cd zcode-wallpaper
 | 现象 | 处理 |
 |------|------|
 | 看不到壁纸 | 确认：① 已跑过 `resize.bat`（`wallpapers-thumb/` 非空）② 是用 `start-zcode.bat` 启动的（不是直接开 ZCode）③ 启动前已完全退出旧 ZCode |
+| 双击 `inject-only.bat` 提示 "Could not reach ZCode debug port" | `inject-only.bat` 只注入、不启动 ZCode。**ZCode 必须已通过 `start-zcode.bat` 开着**（带调试端口）。如果 ZCode 是直接开的（没走 `start-zcode.bat`），端口 9222 没开 → 先完全退出再用 `start-zcode.bat` 重启 |
 | `找不到 ZCode.exe` | 自动探测失败，手动编辑 `start-zcode.bat` 里的 `ZCODE_EXE` |
 | 壁纸太花看不清字 | 调高 `wallpaper.css` 里的 alpha，或开毛玻璃模糊 |
 | ZCode 升级后壁纸没了 | 正常，升级会换 app.asar 但不影响本工具。重跑 `start-zcode.bat` 即可 |
