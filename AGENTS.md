@@ -158,6 +158,68 @@ elementsWithWallpaperBg = []                     ← 没有任何子元素有壁
 
 ---
 
+## 核心教训 3：语法绿 + 单测绿 ≠ 真跑得通，必须端到端跑一遍（2026-06）
+
+第三次大坑。和前两个同型——**"我以为验证过了"其实是没验证**。
+专属于窗口透明模式（见下），但教训通用。
+
+### 事故回放
+
+`transparent.ps1` 写完后：`Parser.ParseFile` 语法 0 错误、`npm test` 全绿
+（含 transparenttest 的 10 个纯函数 check）、`windowselect.cjs` 规则单测也绿。
+按这些信号看，功能"应该"能跑。**于是 AI 上一轮直接交付，让你去人眼验。**
+
+但人眼验之前应该先**真机跑一次**脚本本身。真机一跑：
+
+```
+[transparent] 进程 'ZCode' 在跑，但没找到可见顶层窗口。   ← exit 2
+```
+
+可独立探测明明显示 ZCode 有 1 个可见顶层窗口（hwnd 133212，1936x1048）。
+**矛盾 = 模型错了。**
+
+### 根因（靠逐字跑 C# Dump 输出查出来的）
+
+`WinEnum::Dump` 的 C# 拼字符串：
+```
+h.ToInt64() + "|" + pid + "|" + cls + "|" + title + "|"
+            + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) + "|" + (owner...)
+```
+→ 5 个 `|`，**6 个字段，index 0-5**：`hwnd|pid|cls|title|WxH|ownerFlag`。
+
+但 PS 解析写的是：
+```powershell
+$size = $p[5] -split 'x'    # ← index 5 是 ownerFlag("1")，不是 size
+$toplevel = ($p[6] -eq "1") # ← index 6 越界 = $null，永远 false
+```
+
+`size` 拿到 `"1"` → `width=1, height=$null→0`；`toplevel=$null→false`。
+候选全被 `Where-Object { toplevel -and width>0 -and height>0 }` 过滤掉 → 0 候选 → exit 2。
+**C#/PS 两边的字段索引差一位**，单测里测的是纯 JS 函数（`windowselect.cjs`），
+根本碰不到这段 C#+PS 的胶水代码，所以单测绿完全没抓住。
+
+### 为什么语法检查 / 单测都抓不到
+
+- `Parser.ParseFile` 只看 PowerShell 语法，`$p[6]` 是合法语法（越界访问返回 $null，不报错）。
+- `transparenttest.cjs` 测的是 `windowselect.cjs` 的纯 JS 规则，**不碰 PS 的 `$line -split` 胶水**。
+- 这段胶水（C# 拼字符串 ↔ PS 解析）是**跨语言边界**，没有任何测试覆盖它。
+
+### 规则补丁（抄进脑子里）
+
+12. **跨语言/跨进程的胶水代码（C#↔PS、PS↔bat、node↔bat）没有测试覆盖时，必须真机端到端跑一遍。**
+    单测只能覆盖单一语言内的纯函数。C# 拼 `|` 然后 PS `-split` 这种，两边各自合法，
+    合起来错位——只有真跑才抓得到。
+13. **"语法 OK + npm test 绿"不等于"功能跑得通"。** 语法只管能不能 parse，单测只管测到的那层。
+    没测到的层（胶水、bat 探测、Win32 调用）必须靠**真机 dry-run** 验，不能靠"看起来对"。
+14. **真机验证用 `-DryRun` 这种不阻塞的模式。** transparent.ps1 加了 `-DryRun`：
+    探测+设 alpha 后立即恢复退出，不进热键循环。能用真窗口验证探测/Set-Alpha/恢复，
+    又不会卡死控制台。下次写类似的"阻塞监听"脚本，默认带个 dry-run 逃生口。
+15. **遇到"应该工作却不工作"，逐字跑可疑的那一段输出。** 这次根因是靠
+    `WinEnum::Dump` 真跑出来数字段（`raw lines: 1`，`133212|21496|...|1936x1048|1` = 6 字段），
+    再对照 PS 的 `$p[5]/$p[6]`，瞬间看出错位。和教训 1 的"逐字复现可疑行"同款手法。
+
+---
+
 ## 视频壁纸（`--video` 模式）
 
 图片壁纸之外的第二种背景：把 `.mp4`（等视频）当动态背景播。和图片走**同一个 `inject.cjs`**，
