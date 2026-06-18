@@ -22,7 +22,8 @@ param(
   [int]   $InitialAlpha = 200,   # 0-255, 默认 ~78% (偏不透明保可读)
   [int]   $Step         = 25,
   [int]   $MinAlpha     = 30,    # 防止调到完全看不见
-  [int]   $MaxAlpha     = 255
+  [int]   $MaxAlpha     = 255,
+  [switch]$DryRun       # 探测+设 alpha 后立即恢复并退出，不进热键循环 (验证/调试用)
 )
 
 # Win32 P/Invoke。常量命名清楚，不在 C# 里裸写 magic number。
@@ -110,9 +111,12 @@ Add-Type -TypeDefinition $enumCode -Language CSharp
 $pidPtr = @($pidSet | ForEach-Object { [IntPtr]$_ })
 $raw = [WinEnum]::Dump($pidPtr)
 # 解析成对象数组 (对齐 windowselect.cjs 的 shape)
+# C# Dump format: hwnd|pid|cls|title|<WxH>|<ownerFlag>
+#   index:        0   1   2   3      4       5
+# 所以 size 在 [4]，toplevel(owner==1) 在 [5]。别再数错字段了。
 $windows = foreach ($line in $raw) {
   $p = $line -split '\|'
-  $size = $p[5] -split 'x'
+  $size = $p[4] -split 'x'
   [pscustomobject]@{
     hwnd      = [long]$p[0]
     pid       = [int]$p[1]
@@ -121,7 +125,7 @@ $windows = foreach ($line in $raw) {
     width     = [int]$size[0]
     height    = [int]$size[1]
     visible   = $true       # EnumWindows+IsWindowVisible 已过滤
-    toplevel  = ($p[6] -eq "1")
+    toplevel  = ($p[5] -eq "1")
   }
 }
 # 应用 windowselect.cjs 同款规则：pid (已过滤) + visible (已) + toplevel + 面积>0
@@ -164,6 +168,17 @@ function Set-Alpha($h, $a) {
 $script:alpha = $InitialAlpha
 Set-Alpha $hwnd $script:alpha
 Write-Host "[transparent] 已设透明 alpha=$script:alpha/255"
+
+# DryRun: 探测+设 alpha 已成功，立即恢复并退出，不进热键循环。
+# 用于验证/调试 (probe 是否找对窗口、SetLayeredWindowAttributes 是否生效)，不阻塞。
+if ($DryRun) {
+  Write-Host "[transparent] -DryRun: 恢复不透明并退出 (不进热键循环)。"
+  Set-Alpha $hwnd 255
+  $style = [Win32]::GetWindowLong($hwnd, $GWL_EXSTYLE)
+  [Win32]::SetWindowLong($hwnd, $GWL_EXSTYLE, $style -band (-bnot $WS_EX_LAYERED)) | Out-Null
+  Write-Host "[transparent] -DryRun done。"
+  exit 0
+}
 
 # ---- 4) 注册热键 ----
 $okUp   = [Win32]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_UP,   $MOD_CONTROL -bor $MOD_ALT, $VK_UP)
