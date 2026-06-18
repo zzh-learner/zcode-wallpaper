@@ -5,25 +5,10 @@ const path = require("path");
 const inject = require("./inject.cjs");
 
 const STYLE_ID = "zcode-user-wallpaper";
-
-// Mirror buildExpression from inject.cjs (kept in sync manually)
-function buildExpression(mode, css) {
-  if (mode === "remove") {
-    return (
-      "(function(){var e=document.getElementById(" +
-      JSON.stringify(STYLE_ID) +
-      ");if(e){e.remove();return 'removed';}return 'none';})()"
-    );
-  }
-  return (
-    "(function(){var id=" +
-    JSON.stringify(STYLE_ID) +
-    ";var existing=document.getElementById(id);if(existing)existing.remove();" +
-    "var s=document.createElement('style');s.id=id;s.textContent=" +
-    JSON.stringify(css) +
-    ";document.documentElement.appendChild(s);return 'ok';})();"
-  );
-}
+// buildExpression comes from inject.cjs itself, so tests exercise the real
+// implementation instead of a manually-synced copy. (Previously a copy lived
+// here and could silently drift from inject.cjs — see AGENTS.md.)
+const { buildExpression } = require("./inject.cjs");
 
 function makeFakeDom() {
   // A minimal registry so getElementById finds whatever was appended.

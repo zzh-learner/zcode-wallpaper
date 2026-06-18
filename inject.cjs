@@ -275,7 +275,7 @@ async function main() {
   process.exit(affected > 0 ? 0 : 1);
 }
 
-module.exports = { toFileUrl, listWallpapers, pickRandom };
+module.exports = { toFileUrl, listWallpapers, pickRandom, buildExpression };
 
 if (require.main === module) {
   main().catch((e) => {
