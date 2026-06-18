@@ -10,6 +10,9 @@
 启动链路（关键，调试时按这个顺序看）：
 
 ```
+wallpaper.bat                 总入口菜单：场景化选择（新机器初始化 / 日常启动 / 换图重注入
+                              / 只重注入 / 移除 / 重装依赖），按场景调下面这些脚本，跑完回菜单。
+                              本身是 ASCII-only 的 cmd 循环，中文菜单由 lib/menu.cjs 打印。
 setup.bat  → setup.cjs        装 sharp/ws 依赖
 resize.bat → resize.cjs        wallpapers/*.jpg → wallpapers-thumb/*.jpg（2560px 缩图）
 start-zcode.bat               启动 ZCode(带 debug port) → 等待 page target → 调 inject.cjs
@@ -148,8 +151,12 @@ elementsWithWallpaperBg = []                     ← 没有任何子元素有壁
 
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest。
-30 项。改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest。
+改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
+
+`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：6 个场景 + 退出项齐全、顺序对、
+每个场景的中文说明和"调用哪些脚本"标注都在、5 个底层脚本名至少出现一次。
+防止菜单被人改坏（删场景、改错调用链说明）却没人发现。
 
 `cdp-retry-test.cjs` 是为第一次事故加的回归测试：mock 故意拒掉前 3 次 WS 握手，
 验证 inject.cjs 的 retry 能恢复。模拟冷启动握手失败场景。
