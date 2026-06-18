@@ -62,13 +62,17 @@ function httpGet(url) {
     const oor = await httpGet(base + "/api/book/" + id + "/chapter/9999");
     check("out-of-range chapter -> 404", oor.status === 404);
 
-    // /reader serves html
-    const reader = await httpGet(base + "/reader");
-    check("/reader returns html", reader.status === 200 && reader.body.indexOf("<title>") !== -1);
+    // /reader serves html (directly, no redirect)
+    const reader = await httpGet(base + "/reader/");
+    check("/reader/ returns html", reader.status === 200 && reader.body.indexOf("<title>") !== -1);
 
-    // / redirects to /reader
+    // /reader (no slash) redirects to /reader/ (so relative hrefs resolve)
+    const noSlash = await httpGet(base + "/reader");
+    check("/reader redirects to /reader/", noSlash.status === 302 && (noSlash.headers.location || "") === "/reader/");
+
+    // / redirects to /reader/
     const root = await httpGet(base + "/");
-    check("/ redirects to /reader", root.status === 302 && (root.headers.location || "").indexOf("/reader") !== -1);
+    check("/ redirects to /reader/", root.status === 302 && (root.headers.location || "") === "/reader/");
   } finally {
     server.close();
     try { fs.rmSync(tmpNovels, { recursive: true }); } catch (e) {}
