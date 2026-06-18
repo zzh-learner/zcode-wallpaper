@@ -17,7 +17,7 @@ echo [transparent] Step 1/2: launch ZCode (no wallpaper injection) ...
 call "%~dp0launch-zcode.bat"
 set rc=!errorlevel!
 if not "!rc!"=="0" (
-  echo [transparent] ZCode launch not ready (rc=!rc!), transparent mode not started.
+  echo [transparent] ZCode launch not ready rc=!rc! - transparent mode not started.
   goto :hold
 )
 
