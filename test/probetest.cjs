@@ -27,7 +27,7 @@ function runProbe(port) {
   return new Promise((resolve) => {
     const ps = spawn(
       "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "probe.ps1"), "-Port", String(port)],
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "..", "probe.ps1"), "-Port", String(port)],
       { windowsHide: true }
     );
     ps.on("exit", (code) => resolve(code));

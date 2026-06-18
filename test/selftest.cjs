@@ -1,14 +1,14 @@
 // Self-test for inject.cjs buildExpression logic against a fake DOM.
-// Run: node selftest.cjs
+// Run: node test/selftest.cjs
 const fs = require("fs");
 const path = require("path");
-const inject = require("./inject.cjs");
+const inject = require("../lib/inject.cjs");
 
 const STYLE_ID = "zcode-user-wallpaper";
 // buildExpression comes from inject.cjs itself, so tests exercise the real
 // implementation instead of a manually-synced copy. (Previously a copy lived
 // here and could silently drift from inject.cjs — see AGENTS.md.)
-const { buildExpression } = require("./inject.cjs");
+const { buildExpression } = require("../lib/inject.cjs");
 
 function makeFakeDom() {
   // A minimal registry so getElementById finds whatever was appended.
@@ -52,7 +52,7 @@ function check(name, cond) {
 
 // --- Test 1: inject ---
 {
-  const css = fs.readFileSync(path.join(__dirname, "wallpaper.css"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "lib", "wallpaper.css"), "utf8");
   const { document } = makeFakeDom();
   const fn = new Function("document", "return " + buildExpression("inject", css));
   const result = fn(document);

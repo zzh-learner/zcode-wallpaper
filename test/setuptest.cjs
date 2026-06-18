@@ -1,5 +1,5 @@
-// Self-test for setup.cjs pure functions. Run: node setuptest.cjs
-const setup = require("./setup.cjs");
+// Self-test for setup.cjs pure functions. Run: node test/setuptest.cjs
+const setup = require("../lib/setup.cjs");
 
 let pass = 0,
   fail = 0;

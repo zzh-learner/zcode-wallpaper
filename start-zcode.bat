@@ -64,7 +64,7 @@ goto :hold
 
 :inject
 echo [wallpaper] Step 4: inject wallpaper ^(window ready after %tries% tries^)
-node "%WP_DIR%\inject.cjs"
+node "%WP_DIR%\lib\inject.cjs"
 set rc=!errorlevel!
 echo.
 if "!rc!"=="0" (

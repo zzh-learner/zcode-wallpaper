@@ -26,7 +26,7 @@ if errorlevel 1 (
 
 echo [wallpaper] Node.js found. Running setup ...
 echo.
-node "%~dp0setup.cjs"
+node "%~dp0lib\setup.cjs"
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (

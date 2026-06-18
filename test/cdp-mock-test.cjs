@@ -1,8 +1,9 @@
 // CDP mock server: emulates the /json + WebSocket parts of a Chromium debug
 // endpoint enough to exercise inject.cjs end-to-end without a real ZCode.
-// Run: node cdp-mock-test.cjs
+// Run: node test/cdp-mock-test.cjs
 const http = require("http");
 const { WebSocketServer, WebSocket } = require("ws");
+const path = require("path");
 
 let lastInjectedCss = null;
 let injectedState = false; // tracks whether the mock "page" currently has the wallpaper style
@@ -81,8 +82,8 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
     fail = 0;
   const run = async (label, args, expectInStdout) => {
     try {
-      const { stdout } = await execFileP(process.execPath, ["inject.cjs", ...args], {
-        cwd: __dirname,
+      const { stdout } = await execFileP(process.execPath, ["lib/inject.cjs", ...args], {
+        cwd: path.join(__dirname, ".."),
         env: { ...process.env, ZCODE_DEBUG_PORT: "9998" },
         encoding: "utf8",
       });

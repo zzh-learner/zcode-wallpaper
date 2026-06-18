@@ -41,7 +41,7 @@ exit /b 1
 
 :inject
 echo [wallpaper] Port ready. Injecting wallpaper...
-node "%WP_DIR%\inject.cjs"
+node "%WP_DIR%\lib\inject.cjs"
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (

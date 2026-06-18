@@ -26,7 +26,7 @@ if errorlevel 1 (
 
 echo [wallpaper] Node.js found. Resizing ...
 echo.
-node "%~dp0resize.cjs"
+node "%~dp0lib\resize.cjs"
 set rc=%errorlevel%
 echo.
 if "%rc%"=="0" (

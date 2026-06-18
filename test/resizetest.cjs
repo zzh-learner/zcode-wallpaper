@@ -1,8 +1,8 @@
-// Self-test for resize.cjs pure functions. Run: node resizetest.cjs
+// Self-test for resize.cjs pure functions. Run: node test/resizetest.cjs
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const resize = require("./resize.cjs");
+const resize = require("../lib/resize.cjs");
 
 let pass = 0,
   fail = 0;

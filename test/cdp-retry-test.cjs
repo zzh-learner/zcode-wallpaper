@@ -12,6 +12,7 @@ const http = require("http");
 const { WebSocketServer } = require("ws");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const path = require("path");
 const execFileP = promisify(execFile);
 
 const PORT = 9999;
@@ -74,8 +75,8 @@ mockHttp.listen(PORT, "127.0.0.1", async () => {
 
   let pass = 0, fail = 0;
   try {
-    const { stdout } = await execFileP(process.execPath, ["inject.cjs"], {
-      cwd: __dirname,
+    const { stdout } = await execFileP(process.execPath, ["lib/inject.cjs"], {
+      cwd: path.join(__dirname, ".."),
       env: { ...process.env, ZCODE_DEBUG_PORT: String(PORT) },
       encoding: "utf8",
       timeout: 60000,
