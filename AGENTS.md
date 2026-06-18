@@ -4,8 +4,13 @@
 
 ## 项目是什么
 
-**zcode-wallpaper**：通过 CDP（Chrome DevTools Protocol）给 ZCode（Electron 应用）注入壁纸，
-不改 `app.asar`，靠 `--remote-debugging-port` 启动后往页面注入 `<style>`。
+**zcode-wallpaper**：给 ZCode（Electron 应用）做定制的工具集，不改 `app.asar`。
+**四种能力，三种不同层**：
+- **图片 / 视频壁纸**：CDP（Chrome DevTools Protocol）注入 `<style>`/`<video>` 到 ZCode 主页面
+- **窗口透明**：Win32 `SetLayeredWindowAttributes` 改 ZCode 主窗口 HWND 的 alpha
+- **小说阅读器**：独立本地 HTTP server + 前端 SPA，ZCode 自带浏览器面板加载它（**不走 CDP，不注入主页面**）
+
+启动链路（关键，调试时按这个顺序看）：
 
 启动链路（关键，调试时按这个顺序看）：
 
@@ -22,9 +27,15 @@ lib/inject.cjs                CDP 连接 → Runtime.evaluate 注入。
                               - --video：注入 <style>(透明层) + 真实 <video> 元素（见下面"视频壁纸"）
                               - --remove：同时清掉 <style> 和 <video>，不管之前注的是图还是视频
 bin/probe.ps1                 start-zcode/inject-only 共用的 debug-port 探测（同目录调用，见 bin/ 下两个 .bat）
+bin/reader-server.bat         启动小说阅读器服务（**不走 CDP**）。`start` 开独立常驻窗口跑
+                              lib/reader-server.cjs（HTTP server :17890，扫 novels/*.txt 切章供 API，
+                              监听成功后把 URL 写剪贴板），关窗即停。
+                              用户在 ZCode 自带浏览器面板（Electron <webview>）粘 URL 打开 reader。
+                              和图片/视频/透明完全不同的子系统，见下面"小说阅读器"。
 ```
 
-**路径约定**：`wallpaper.bat` 留在根目录当唯一双击入口；5 个辅助 `.bat` 和 `probe.ps1` 都在
+**路径约定**：`wallpaper.bat` 留在根目录当唯一双击入口；所有辅助 `.bat`（`setup`/`resize`/
+`start-zcode`/`inject-only`/`start-transparent`/`transparent`/`reader-server`）和 `probe.ps1` 都在
 `bin/` 下。每个 `bin/*.bat` 开头算出项目根 `set "WP_ROOT=%~dp0.."`，用它定位根下的 `lib/`；
 `probe.ps1` 用 `%~dp0probe.ps1` 同目录调用。改这些 `.bat` 的路径定位时别破坏这个约定。
 
@@ -222,6 +233,52 @@ $toplevel = ($p[6] -eq "1") # ← index 6 越界 = $null，永远 false
 
 ---
 
+## 核心教训 4：先查"环境有没有原生容器"，别默认要自己造（2026-06）
+
+第四次大坑，做小说阅读器时踩的。和前三个同型——**先验假设错了，但这次错在"选错了
+实现路径"而不是"参数不控制现象"**。
+
+### 事故回放
+
+需求："在 ZCode 里看小说"。第一反应是沿用项目现有能力——**CDP 注入浮层**（往 ZCode
+主页面塞一个 `<div>` 阅读器）。调研 any-reader（VSCode 插件）时也默认"它用 webview，
+我们没有 webview API，所以只能 CDP 注入"。
+
+但真机探测 ZCode 的 DOM 结构时发现：ZCode **自带一个 Electron `<webview>` 浏览器面板**
+（`data-testid="browser-webview"`，`partition="persist:zcode-embedded-browser"`），
+而且用户实测它能加载本地 `file://` 和 `http://localhost`。**这意味着阅读器根本不用
+注入浮层——直接写一个本地 HTML，让 ZCode 浏览器面板加载它就行**。复杂度降一个数量级。
+
+### 根因
+
+"在 X 里做 Y" 的需求，第一反应不该是"用项目现有的注入/修改手段"，而是**"X 有没有
+原生支持 Y 的容器"**。这次 ZCode 原生就有浏览器面板（能加载任意 URL），用它加载
+本地 reader HTML 是天然隔离的容器；而 CDP 注入浮层是次优解（事件穿透、层级、
+localStorage 共享 origin 污染）。差点走错路。
+
+### 规则补丁（抄进脑子里）
+
+16. **"在 X 里做 Y" 先查 X 有没有原生容器**。想在 ZCode 里看小说，第一反应不该是
+    "CDP 注入浮层"，而是"ZCode 有没有浏览器/webview 面板"。靠真机探测（CDP 列 target +
+    dump `<webview>` 属性 + 用户实测加载）发现内置浏览器面板能加载本地 URL，直接把
+    复杂度降了一个数量级。教训 1（先验假设错了全白干）和教训 10（理论打架信事实）的同型应用。
+17. **跨环境共享代码不能时，共享测试**。server（Node）和前端（浏览器）各写一份 codec/toc，
+    没法共用代码（运行时不同）。但能用**完全相同的测试用例**钉死两边行为一致。
+    单测只覆盖单语言内的纯函数，跨环境胶水（这次是 codec 的两份实现）必须靠
+    "同一套断言跑两份代码"来覆盖——否则一边改了另一边不知道（教训 12 同型）。
+18. **"浏览器加载本地 SPA"有两个隐性陷阱，单测验不到，必须真机跑**：
+    (a) **`/reader`（无尾斜杠）会让相对路径解析错位**：浏览器把 `/reader` 当文件名，
+        `reader.css` 解析成 `/reader.css`（404）而不是 `/reader/reader.css`。所有 script
+        加载失败 → JS 崩 → 静默无报错（书架空、顶栏还在）。server 必须 `/reader` → `/reader/`。
+    (b) **前端 lib 只导 CommonJS 不挂浏览器全局**：`module.exports` 在浏览器里不生效，
+        reader.js 调 `window.__readerProgress.getShelf()` 会因 undefined 抛错。前端 lib 必须
+        同时 `module.exports`（Node 测）和 `window.__readerXxx = {...}`（浏览器用）。
+    这两个都是"server API 全对、单测全绿、但 webview 里就是空"的典型——CDP 连 webview
+    查 `window.__readerXxx` 类型 + shelf DOM 才定位。**真机验证必须查运行时全局状态，
+    不能只看 server 返回**。
+
+---
+
 ## 视频壁纸（`--video` 模式）
 
 图片壁纸之外的第二种背景：把 `.mp4`（等视频）当动态背景播。和图片走**同一个 `inject.cjs`**，
@@ -373,9 +430,101 @@ PS 里的 `$hwnd`/`$alpha`/`$_` 变量（见上面"环境注意"）。`.bat` 里
 
 ---
 
+## 小说阅读器（在 ZCode 里看小说）
+
+第四种能力。和前三种**完全不同层**：图片/视频是 CDP 注入渲染层，透明是原生窗口层，
+阅读器是**独立子应用**——本地 HTTP server + 前端 SPA，ZCode 自带浏览器面板加载它。
+**不走 CDP，不碰 inject.cjs，不改 ZCode 任何状态**。
+
+### 为什么不复用 CDP 注入
+
+CDP 注入是把 DOM/CSS 塞进 ZCode 主页面。阅读器需要"完整独立的阅读环境"（书架、
+目录、滚动、进度），塞进主页面会有事件穿透/层级/localStorage 污染问题。而 ZCode
+**自带浏览器面板**（Electron `<webview>`，`data-testid="browser-webview"`，
+`partition="persist:zcode-embedded-browser"`）正好是独立渲染进程、独立 storage——
+**用它加载本地 reader URL 是天然隔离的容器**。这是真机探出来的（CDP 探测 + 用户
+实测 `file://` 和 `http://localhost` 都能加载），不是设计猜的（见核心教训 4）。
+
+### 三组件，互不耦合
+
+- `lib/reader-server.cjs` — HTTP server，扫 `novels/`、章节切分、供 API。**不依赖 inject.cjs**
+- `reader/` — 前端 SPA，双模式（`http:` 走 server fetch，`file:` 走拖拽兜底）
+- `bin/reader-server.bat` — 独立常驻入口，不进 `wallpaper.bat` 的用完即走流程
+
+### 双模式设计（server 主 + 拖拽兜底）
+
+reader 检测 `location.protocol`：
+- `http:` → fetch `/api/...`（完整书架、自动重连）
+- `file:` → 拖拽 `.txt` + FileReader（server 没启时的退化，永远能用）
+
+两种模式都已真机验过（核心教训 4 的验证清单）。
+
+### 章节切分在 server 不在前端
+
+761 万字不能全量塞 DOM。server 启动时一次性解码 + 正则切章（卷/章两级），
+只把"当前章的段落数组"发给前端。前端永远只持有一章。
+
+### 编码：fatal UTF-8 是关键
+
+中文 txt 无 BOM、GB18030 为主。区分 UTF-8 vs GB18030 的决定性手段是
+`new TextDecoder('utf8',{fatal:true})`——非严格 UTF-8 解 GBK 会得一堆 U+FFFD 但不报错，
+fatal 模式第一个非法字节就抛，捕获后转 GB18030。**前后端各一份 codec**
+（server `lib/reader-codec.cjs` + 前端 `reader/lib/codec.js`），跨环境无法共享代码，
+靠**同一套测试用例**（`readercodetest.cjs` + `readercodetestweb.cjs`）钉一致。
+这是核心教训 3/4（跨环境胶水靠共享测试）的直接应用。
+
+### server 端口冲突自增
+
+`EADDRINUSE` 时自动 +1（17890→17891…最多 5 次）。**剪贴板必须在 listen 成功后写**
+（拿到实际端口），否则会写进去被占的旧端口——这是 spec 自审抓到的时序约束。
+`readerservertest.cjs` 专门钉死这个回归（占一个端口再起 server，验它换到 +1）。
+
+### 路径陷阱：`/reader` 必须重定向到 `/reader/`
+
+浏览器把 `http://host/reader` 当成"名为 reader 的文件"，所以 HTML 里相对路径
+`reader.css` / `lib/codec.js` 会解析成 `/reader.css` / `/lib/codec.js`（**404**），
+而不是 `/reader/reader.css`。server 必须 `/reader` → 302 `/reader/`（带尾斜杠），
+相对路径才正确解析到 `/reader/` 下。**这是真机踩的坑**（书架空 + JS 全 undefined，
+见核心教训 4），`readerservertest.cjs` 有断言钉死。
+
+### 前端 lib 必须同时挂 CommonJS 导出 + 浏览器全局
+
+`reader/lib/{codec,toc,progress}.js` 要**两边都能用**：
+- Node 测试 `require()` 它们 → 需要 `module.exports`
+- 浏览器 `<script>` 加载 + reader.js/book.js 用 → 需要 `window.__readerXxx = {...}`
+
+只导 CommonJS 会导致 webview 里 `window.__readerProgress` 是 undefined → renderShelf 崩 →
+书架空。**这也是真机踩的坑**（核心教训 4）。`book.js` 用 IIFE 挂全局是对的，
+codec/toc/progress 当初漏了浏览器分支，已补。
+
+### 不偷偷后台常驻
+
+`reader-server.bat` 用 `start "..." cmd /k node ...` 开**独立可见窗口**。关窗即停。
+不学某些工具的"装完偷偷开机自启"——显式常驻、显式停止。
+
+### 调试 webview 的 ws URL 坑
+
+CDP `/json` 返回的 webview `webSocketDebuggerUrl` 是 `ws://localhost/devtools/page/XXX`
+（**无端口，默认 80 连不上**）。任何脚本连 webview（如 `scripts/inspect-reader.cjs`、
+`test-reader-flow.cjs`）都要把 `ws://localhost` 重写成 `ws://127.0.0.1:9222`。
+不带端口这个坑只在连 webview target 时出现（page target 的 wsUrl 带端口）。
+
+### 已知遗留
+
+- **最后一章吞后记/番外**：parseTOC 末章 `endOffset = text.length`，没有"第X章"标题
+  的内容（后记、番外、网站声明）全被并进最后一章（实测样本最后一章 29278 段 / 147 万字）。
+  修复思路：末章 endOffset 用"明显分界"（如"（全书完）"、"——后记——"）而非 text.length。v2。
+- **重命名文件进度跟丢**：bookId 是 filename hash，改名后变新 id。书架旧条目显示
+  "重新拖入关联"，可点重拖关联（不做路径模糊匹配，YAGNI）。
+- **侧边栏硬画背景不影响本子系统**：阅读器在 webview 独立渲染进程，不共享 ZCode 的
+  CSS 变量——这是本设计相对壁纸方案的额外优势（见核心教训 2 的"已知遗留"对壁纸的影响，
+  阅读器无此问题）。
+
+---
+
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest → transparenttest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：10 个场景 + 退出项齐全、顺序对、
