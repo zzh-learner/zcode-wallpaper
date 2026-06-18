@@ -76,4 +76,35 @@ function httpGet(url) {
   }
 
   console.log("\n" + pass + " passed, " + fail + " failed");
-})().catch(e => { console.error("TEST ERROR:", e); process.exit(1); });
+})()
+.then(() => {
+// === port-conflict auto-increment (spec §11 风险钉死) ===
+  return (async () => {
+    const tmpNovels2 = fs.mkdtempSync(path.join(os.tmpdir(), "reader-novels2-"));
+    const tmpReader2 = fs.mkdtempSync(path.join(os.tmpdir(), "reader-web2-"));
+    fs.writeFileSync(path.join(tmpReader2, "index.html"), "<!doctype html>");
+    const { createServer } = require("../lib/reader-server.cjs");
+
+    // occupy a port
+    const blocker = require("net").createServer();
+    await new Promise(r => blocker.listen(0, "127.0.0.1", r));
+    const blockedPort = blocker.address().port;
+
+    // ask server to use the blocked port -> should auto-increment to blockedPort+1
+    const s = await createServer({ novelsDir: tmpNovels2, readerDir: tmpReader2, port: blockedPort, host: "127.0.0.1" });
+    check("port conflict auto-incremented", s.port === blockedPort + 1);
+
+    // verify the new port actually serves
+    const r = await httpGet("http://127.0.0.1:" + s.port + "/api/books");
+    check("incremented port serves API", r.status === 200);
+
+    s.close();
+    await new Promise(r => blocker.close(r));
+    try { fs.rmSync(tmpNovels2, { recursive: true }); } catch (e) {}
+    try { fs.rmSync(tmpReader2, { recursive: true }); } catch (e) {}
+
+    console.log("\n" + pass + " passed, " + fail + " failed");
+    process.exit(fail === 0 ? 0 : 1);
+  })();
+})
+.catch(e => { console.error("TEST ERROR:", e); process.exit(1); });
