@@ -193,33 +193,85 @@ async function main() {
   }
 
   const expression = buildExpression(MODE, css);
-  let affected = 0;
-  for (const t of targets) {
+
+  // Verify the injected change actually took effect in the page.
+  // For inject: the <style> element is in the DOM AND body got a background
+  // image (not "none"). For remove: the <style> is gone.
+  // "evaluate returned 'ok'" alone is NOT enough -- during cold start the
+  // page may not be fully ready, or a navigation may reset the context, so
+  // we verify the real computed state and retry if it didn't stick.
+  function verifyExpression(mode) {
+    if (mode === "remove") {
+      return "(document.getElementById(" + JSON.stringify(STYLE_ID) + ") ? 'present' : 'gone')";
+    }
+    return (
+      "(function(){var s=document.getElementById(" +
+      JSON.stringify(STYLE_ID) +
+      ");var bg=getComputedStyle(document.body).backgroundImage;" +
+      "return (!s||bg==='none') ? 'noeffect' : 'effect';})()"
+    );
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const MAX_ATTEMPTS = 6;
+  const ATTEMPT_DELAY_MS = 800;
+
+  // Inject+verify one target. Returns true if it took effect.
+  async function injectOne(target) {
+    let ws;
     try {
-      const { ws, call } = await connect(t.webSocketDebuggerUrl);
-      const res = await call("Runtime.evaluate", {
-        expression,
+      ({ ws, call } = await connect(target.webSocketDebuggerUrl));
+      await call("Runtime.evaluate", { expression, returnByValue: true });
+      const vres = await call("Runtime.evaluate", {
+        expression: verifyExpression(MODE),
         returnByValue: true,
       });
-      const value = res.result && res.result.value;
-      console.log(
-        "[wallpaper] " +
-          (MODE === "remove" ? "移除" : "注入") +
-          " -> " +
-          (t.title || "").slice(0, 30) +
-          "  (" +
-          value +
-          ")"
-      );
-      if (value === "ok" || value === "removed") affected++;
+      const v = vres.result && vres.result.value;
       ws.close();
+      ws = null;
+      return v === (MODE === "remove" ? "gone" : "effect");
     } catch (e) {
-      console.error(
-        "[wallpaper] " + (t.title || "").slice(0, 30) + " 失败: " + e.message
-      );
+      if (ws) { try { ws.close(); } catch (_) {} }
+      return false;
     }
   }
-  console.log("[wallpaper] 完成，影响窗口 " + affected + "/" + targets.length + "。");
+
+  // Retry loop. Re-list targets on EVERY attempt: during cold start the page
+  // target's webSocketDebuggerUrl can change across navigations (about:blank ->
+  // index.html), so a target captured once may go stale. Track which target
+  // ids we've already satisfied so we don't re-inject a stable page.
+  let affected = 0;
+  const satisfied = new Set();
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let live;
+    try {
+      live = await listTargets();
+    } catch (e) {
+      // Port not ready yet on this attempt; wait & retry.
+      if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY_MS);
+      else {
+        console.error("[wallpaper] 无法连接调试端口: " + e.message);
+      }
+      continue;
+    }
+    for (const t of live) {
+      if (satisfied.has(t.id || t.webSocketDebuggerUrl)) continue;
+      const ok = await injectOne(t);
+      if (ok) {
+        satisfied.add(t.id || t.webSocketDebuggerUrl);
+        console.log(
+          "[wallpaper] " +
+            (MODE === "remove" ? "移除" : "注入") +
+            " -> " +
+            (t.title || "").slice(0, 30) +
+            "  (第 " + attempt + " 次生效)"
+        );
+      }
+    }
+    if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY_MS);
+  }
+  affected = satisfied.size;
+  console.log("[wallpaper] 完成，影响窗口 " + affected + "。");
   process.exit(affected > 0 ? 0 : 1);
 }
 

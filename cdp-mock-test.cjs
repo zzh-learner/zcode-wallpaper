@@ -5,6 +5,7 @@ const http = require("http");
 const { WebSocketServer, WebSocket } = require("ws");
 
 let lastInjectedCss = null;
+let injectedState = false; // tracks whether the mock "page" currently has the wallpaper style
 let removeCalled = false;
 
 const mockHttp = http.createServer((req, res) => {
@@ -35,19 +36,32 @@ mockHttp.on("upgrade", (req, socket, head) => {
 
 wss.on("connection", (ws) => {
   // Tiny CDP over WebSocket: handle Runtime.evaluate only.
+  // Simulates a real page: inject/remove expressions update server-side state,
+  // and the *verify* expression (sent by inject.cjs after injecting) reads that
+  // state back, so inject.cjs's retry+verify logic gets realistic responses.
   ws.on("message", (raw) => {
     const msg = JSON.parse(raw.toString());
     if (msg.method === "Runtime.evaluate") {
-      // Decide outcome by which style id the expression targets, without
-      // trying to parse out the embedded CSS (it may contain any characters).
       const expr = msg.params.expression;
+      // Verify probe (inject.cjs sends this to confirm the change took effect).
+      if (expr.includes("'noeffect'") || expr.includes("'present' : 'gone'")) {
+        const isRemoveVerify = expr.includes("'present' : 'gone'");
+        const value = isRemoveVerify
+          ? (injectedState ? "present" : "gone")
+          : (injectedState ? "effect" : "noeffect");
+        ws.send(JSON.stringify({ id: msg.id, result: { result: { type: "string", value } } }));
+        return;
+      }
+      // The inject/remove action expression itself.
       const isRemove = expr.includes("return 'removed'");
       let value;
       if (isRemove) {
-        value = lastInjectedCss ? "removed" : "none";
+        value = injectedState ? "removed" : "none";
+        injectedState = false;
         removeCalled = true;
       } else {
-        lastInjectedCss = true; // mark "something was injected"
+        injectedState = true; // mark "something was injected"
+        lastInjectedCss = true;
         value = "ok";
       }
       ws.send(JSON.stringify({ id: msg.id, result: { result: { type: "string", value } } }));
@@ -85,11 +99,11 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
   };
 
   // 1. inject
-  await run("inject via mock CDP", [], ["(ok)", "影响窗口 1/1"]);
+  await run("inject via mock CDP", [], ["生效", "影响窗口 1"]);
   // 2. list
   await run("list targets", ["--list"], ["ZCode (mock)", "页面目标"]);
-  // 3. remove (after inject, mock should report 'removed')
-  await run("remove via mock CDP", ["--remove"], ["(removed)", "影响窗口"]);
+  // 3. remove (after inject, mock should report the style gone)
+  await run("remove via mock CDP", ["--remove"], ["生效", "影响窗口 1"]);
 
   console.log("\n[mock] " + pass + " passed, " + fail + " failed.");
   console.log("[mock] an inject was received:", !!lastInjectedCss);
