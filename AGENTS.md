@@ -215,15 +215,99 @@ html/body 强制 transparent 让视频从底层透出，外加复用 `wallpaper.
 
 ---
 
+## 窗口透明模式（看桌面）
+
+第三种背景。和图片/视频**完全不同的层**：那俩是渲染层（CDP 注入 CSS/DOM），
+透明是**原生窗口层**——用 Win32 `SetLayeredWindowAttributes` 把 ZCode 主窗口
+HWND 设半透明，能透过窗口看桌面。**不走 CDP，不需要 debug port**。
+
+### 为什么不能复用图片/视频的 CDP 路径
+
+**CDP 改不了窗口透明度**（spec §2.1，查过 Electron + CDP 官方文档）：
+- Electron 的 `transparent:true` 只在窗口创建时设，运行时不能切；
+- CDP 的 `Browser.setWindowBounds` 只有位置/大小/最小化，没 opacity；
+- `Emulation.setDefaultBackgroundColorOverride` 只让页面背景透明，底层还是
+  ZCode 窗口的不透明底色——看到的会是深色底不是桌面。
+
+所以透明走独立的 `lib/transparent.ps1`，不碰 inject.cjs，不碰 CDP。
+**两个子系统的唯一共享是 `bin/launch-zcode.bat`**（启动 ZCode 的逻辑，
+那是公共前提）。别把透明塞进 inject.cjs 当个 mode——那是错的复用对象
+（核心教训 1 要避免的不是这种跨域的分离，而是同型写法的拷贝重复）。
+
+### alpha 是整个窗口均匀半透明（跷跷板）
+
+`WS_EX_LAYERED + LWA_ALPHA` 对**整个窗口**均匀生效——代码字、菜单、背景
+**一起按同一比例变淡**。完全透明 = 看不见 ZCode，没法用。必然是中间值，
+且字越清楚桌面越糊。这是核心教训 2 的同型坑：**别假设能"背景透明字清晰"**，
+Win32 没这个 API。
+
+### 三件套
+
+- `lib/transparent.ps1` —— 探测窗口 + 设透明 + 热键循环（Ctrl+Alt+↑/↓/0）
+- `bin/transparent.bat` —— 入口（对已开窗口）
+- `bin/start-transparent.bat` —— 入口（一键启动，调 launch-zcode.bat）
+- `bin/launch-zcode.bat` —— 从 start-zcode.bat 抽出的共享启动逻辑，
+  透明模式用它"启动 ZCode 但不注入图片壁纸"。**根除重复**（核心教训 1），
+  顺便修了 start-zcode"启动+注入焊死"的隐患。start-zcode.bat 重构后只剩
+  Step 4 (inject) + hold，对外行为不变。
+
+### 窗口选择规则（PS 和 JS 必须一致）
+
+`lib/transparent.ps1` 探测窗口的选择规则**必须**和 `lib/windowselect.cjs`
+的 `selectMainWindow` 一致：pid 过滤 + visible + toplevel + 零面积过滤；
+单候选自动选，多候选 read-host。规则抽到 JS 单测（`test/transparenttest.cjs`）
+防 PS 侧漂移。Win32 调用本身不测（OS 行为）。
+
+### `transparent.ps1` 必须存 UTF-8 with BOM（踩过的坑）
+
+PowerShell 5.1 **无 BOM 时按本地 ANSI（中文 Windows 是 GBK）解析 .ps1**。
+`transparent.ps1` 里有中文注释和 here-string，无 BOM 时中文字节被按 GBK 读，
+here-string 分隔符 `@"..."@` 解析崩掉，整文件报一堆 C# 语法错。**必须有
+UTF-8 BOM**（`EF BB BF`）。probe.ps1 靠**纯 ASCII**避开这个坑；transparent.ps1
+有中文 echo/注释，只能靠 BOM。**改 transparent.ps1 时别用会剥 BOM 的工具存盘**
+（比如某些编辑器"保存为 UTF-8"其实是 UTF-8 no-BOM）。验语法用 Parser.ParseFile：
+```ps1
+$e=$null; [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$null,[ref]$e); $e
+```
+
+### 已知遗留
+
+- **多窗口可能选错**：DevTools 最大化时面积可能超主窗口。多候选时 read-host
+  让用户选（对齐 ambiguous 分支），但每次重跑要重选（不持久化，YAGNI）。
+- **窗口重建丢透明**：ZCode 重启后 HWND 变了，重跑 transparent.bat。
+- **和图片/视频叠加**：透明不碰 CDP，所以可叠加（半透明窗口 + 里面有壁纸）。
+  这是允许的。`--remove`（场景5）只清 CDP 注入，要关透明靠热键 / 关 PS 进程。
+- **热键冲突**：Ctrl+Alt+↑/↓/0 和别的软件撞会 RegisterHotKey 失败，
+  脚本 Write-Warning 提示，不阻止启动。
+- **进程名不确定**：默认 `-ProcessName ZCode`，找不到时提示用户
+  `Get-Process` 看真实名再用参数覆盖（Electron 应用进程名可能是别的）。
+- **热键循环是 GetMessage 阻塞**：alpha 变化靠按热键触发，无空闲 CPU。
+  Ctrl+C 走 finally 恢复不透明。
+
+### PowerShell 必须写 .ps1（环境注意，复述）
+
+`lib/transparent.ps1` 一律 `-File` 跑，绝不内联 `-Command`——bash 会吞掉
+PS 里的 `$hwnd`/`$alpha`/`$_` 变量（见上面"环境注意"）。`.bat` 里的
+`powershell -Command` 不受影响（走 cmd 不是 bash）。
+
+---
+
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest → transparenttest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
-`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：8 个场景 + 退出项齐全、顺序对、
-每个场景的中文说明和"调用哪些脚本"标注都在、5 个底层脚本名至少出现一次。
+`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：10 个场景 + 退出项齐全、顺序对、
+每个场景的中文说明和"调用哪些脚本"标注都在、7 个底层脚本名至少出现一次。
 防止菜单被人改坏（删场景、改错调用链说明）却没人发现。
-（场景 7/8 是视频壁纸变体，calls 标注是 `start-zcode(video)` / `inject-only(video)`。）
+（场景 7/8 是视频壁纸变体，calls 标注是 `start-zcode(video)` / `inject-only(video)`；
+场景 9/10 是窗口透明模式，calls 标注 `start-transparent` / `transparent`。）
+
+`transparenttest.cjs` 测 `lib/windowselect.cjs` 的 `selectMainWindow` 纯函数：pid/visible/
+toplevel/零面积过滤、单候选自动选、多候选返回 `{ambiguous, candidates}`（按面积降序）。
+规则是 `lib/transparent.ps1` 探测窗口的 JS 镜像——**PS 侧规则必须和这里一致**，
+抽出来单测防漂移。Win32 调用本身不测（OS 行为，mock 真 HWND 没意义）。
+这和 probetest 同思路：钉死可纯函数化的那一层。
 
 `selftest.cjs` 现在还覆盖视频模式：`buildVideoExpression()` 的输出含 `<video>` 元素创建、
 src/autoplay/muted/loop/playsinline、`.play()` 兜底；以及 **`--remove` 同时清掉 `<style>` 和
