@@ -1,29 +1,33 @@
 ﻿# ============================================================
-# ZCode 窗口透明模式 —— 用 Win32 SetLayeredWindowAttributes 让
-# ZCode 主窗口半透明，能透过窗口看桌面。
+# ZCode 窗口透明模式 —— 用 Win32 SetLayeredWindowAttributes 把
+# ZCode 主窗口设成指定透明度，设完即退 (不阻塞、不监听热键)。
 # ------------------------------------------------------------
 # 这是独立子系统：不走 CDP (透明是窗口层的事，见 spec §6)。
-# 常驻监听热键调透明度：
-#   Ctrl+Alt+Up   变不透明 (+Step)
-#   Ctrl+Alt+Down 变透明     (-Step)
-#   Ctrl+Alt+0    恢复完全不透明 + 退出
+# 用法 (必须 -File 跑，见 AGENTS.md 环境注意)：
+#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -Opacity 50
+#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -Opacity 0   # 完全透明 (慎用)
+#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -Opacity 100  # 恢复不透明
+#
+# 透明度语义 (-Opacity, 直觉百分比)：
+#   100 = 完全不透明 (恢复原样)
+#   50  = 半透明 (能透出桌面，字也半淡)
+#   0   = 完全透明 (窗口看不见，慎用)
+#   alpha 是整个窗口均匀半透明——代码字、菜单、背景一起按同一比例变淡。
+#   这是 Win32 LWA_ALPHA 的硬约束 (见 AGENTS.md 核心教训 2 的同型坑)。
 #
 # 窗口选择规则必须和 lib/windowselect.cjs 的 selectMainWindow 一致
 # (spec §5.3/§8.1)：pid 过滤 + visible + toplevel + 零面积过滤；
 # 单候选自动选，多候选 read-host 让用户选。
 #
-# 用法 (必须 -File 跑，见 AGENTS.md 环境注意)：
-#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1
-#   powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -ProcessName ZCode -InitialAlpha 180
+# 历史版本曾有 Ctrl+Alt 热键循环，已按用户要求移除 (设完就完，不再微调)。
+# 要恢复透明度：再跑 -Opacity 100。
 # ============================================================
 
 param(
-  [string]$ProcessName  = "ZCode",
-  [int]   $InitialAlpha = 200,   # 0-255, 默认 ~78% (偏不透明保可读)
-  [int]   $Step         = 25,
-  [int]   $MinAlpha     = 30,    # 防止调到完全看不见
-  [int]   $MaxAlpha     = 255,
-  [switch]$DryRun       # 探测+设 alpha 后立即恢复并退出，不进热键循环 (验证/调试用)
+  [string]$ProcessName = "ZCode",
+  [int]   $Opacity      = 78,    # 0-100，默认 78 (偏不透明保可读)，对齐旧 InitialAlpha=200
+  [int]   $InitialAlpha = -1     # 兼容旧用法 (0-255)；设了就以它为准，忽略 -Opacity
 )
 
 # Win32 P/Invoke。常量命名清楚，不在 C# 里裸写 magic number。
@@ -34,28 +38,24 @@ public class Win32 {
   [DllImport("user32.dll")] public static extern int  GetWindowLong(IntPtr h, int nIndex);
   [DllImport("user32.dll")] public static extern int  SetWindowLong(IntPtr h, int nIndex, int dwNewLong);
   [DllImport("user32.dll")] public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
-  [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-  [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-  [StructLayout(LayoutKind.Sequential)]
-  public struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int pt_x; public int pt_y; }
-  [DllImport("user32.dll")] public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
 }
 "@
 Add-Type -TypeDefinition $win32Code -Language CSharp
 
 # Win32 常量
-$GWL_EXSTYLE     = -20
-$WS_EX_LAYERED   = 0x00080000
-$LWA_ALPHA       = 0x00000002
-$MOD_CONTROL     = 0x0002
-$MOD_ALT         = 0x0001
-$VK_UP           = 0x26
-$VK_DOWN         = 0x28
-$VK_0            = 0x30
-$WM_HOTKEY       = 0x0312
-$HOTKEY_UP       = 1
-$HOTKEY_DOWN     = 2
-$HOTKEY_ZERO     = 3
+$GWL_EXSTYLE   = -20
+$WS_EX_LAYERED = 0x00080000
+$LWA_ALPHA     = 0x00000002
+
+# ---- 解析目标 alpha (0-255) ----
+# -InitialAlpha 优先 (0-255，旧用法)；否则 -Opacity (0-100，新用法) 换算。
+if ($InitialAlpha -ge 0) {
+  $alpha = [Math]::Max(0, [Math]::Min(255, $InitialAlpha))
+} else {
+  $opacity = [Math]::Max(0, [Math]::Min(100, $Opacity))
+  $alpha = [int][Math]::Round($opacity * 2.55)
+}
+Write-Host "[transparent] 目标透明度: Opacity=$Opacity% -> alpha=$alpha/255"
 
 # ---- 1) 找目标进程的 PID 集合 ----
 $procs = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
@@ -158,71 +158,21 @@ if ($candidates.Count -eq 1) {
 }
 $hwnd = [IntPtr]$chosen.hwnd
 
-# ---- 3) 设透明 ----
+# ---- 3) 设透明 (设完即退，不阻塞、不监听热键) ----
 function Set-Alpha($h, $a) {
   $style = [Win32]::GetWindowLong($h, $GWL_EXSTYLE)
   [Win32]::SetWindowLong($h, $GWL_EXSTYLE, $style -bor $WS_EX_LAYERED) | Out-Null
   [Win32]::SetLayeredWindowAttributes($h, 0, $a, $LWA_ALPHA) | Out-Null
 }
 
-$script:alpha = $InitialAlpha
-Set-Alpha $hwnd $script:alpha
-Write-Host "[transparent] 已设透明 alpha=$script:alpha/255"
-
-# DryRun: 探测+设 alpha 已成功，立即恢复并退出，不进热键循环。
-# 用于验证/调试 (probe 是否找对窗口、SetLayeredWindowAttributes 是否生效)，不阻塞。
-if ($DryRun) {
-  Write-Host "[transparent] -DryRun: 恢复不透明并退出 (不进热键循环)。"
-  Set-Alpha $hwnd 255
+Set-Alpha $hwnd $alpha
+if ($alpha -ge 255) {
+  # 恢复不透明：alpha=255 后把 layered 也剥掉，回到原样
   $style = [Win32]::GetWindowLong($hwnd, $GWL_EXSTYLE)
   [Win32]::SetWindowLong($hwnd, $GWL_EXSTYLE, $style -band (-bnot $WS_EX_LAYERED)) | Out-Null
-  Write-Host "[transparent] -DryRun done。"
-  exit 0
+  Write-Host "[transparent] 已恢复完全不透明 (Opacity=100%)。"
+} else {
+  Write-Host "[transparent] 已设透明 alpha=$alpha/255 (Opacity=$Opacity%)。"
 }
-
-# ---- 4) 注册热键 ----
-$okUp   = [Win32]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_UP,   $MOD_CONTROL -bor $MOD_ALT, $VK_UP)
-$okDown = [Win32]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_DOWN, $MOD_CONTROL -bor $MOD_ALT, $VK_DOWN)
-$okZero = [Win32]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_ZERO, $MOD_CONTROL -bor $MOD_ALT, $VK_0)
-if (-not $okUp -or -not $okDown -or -not $okZero) {
-  Write-Warning "部分热键注册失败 (Up=$okUp Down=$okDown Zero=$okZero)，可能和其他软件冲突。"
-}
-Write-Host "[transparent] 热键: Ctrl+Alt+Up=变不透明  Ctrl+Alt+Down=变透明  Ctrl+Alt+0=恢复并退出"
-
-# ---- 5) 消息循环 ----
-$exitLoop = $false
-try {
-  while (-not $exitLoop) {
-    $msg = New-Object Win32+MSG
-    $ret = [Win32]::GetMessage([ref]$msg, [IntPtr]::Zero, 0, 0)
-    if ($ret -le 0) { break }   # WM_QUIT 或出错
-    if ($msg.message -eq $WM_HOTKEY) {
-      switch ([int]$msg.wParam) {
-        $HOTKEY_UP {
-          $script:alpha = [Math]::Min($MaxAlpha, $script:alpha + $Step)
-          Set-Alpha $hwnd $script:alpha
-          Write-Host "[transparent] alpha = $script:alpha / 255"
-        }
-        $HOTKEY_DOWN {
-          $script:alpha = [Math]::Max($MinAlpha, $script:alpha - $Step)
-          Set-Alpha $hwnd $script:alpha
-          Write-Host "[transparent] alpha = $script:alpha / 255"
-        }
-        $HOTKEY_ZERO {
-          Write-Host "[transparent] 恢复不透明并退出..."
-          $exitLoop = $true
-        }
-      }
-    }
-  }
-}
-finally {
-  # 退出清理：即使 Ctrl+C 也恢复 (PS 的 finally 在 trap/Ctrl+C 下会执行)
-  [Win32]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_UP)   | Out-Null
-  [Win32]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_DOWN) | Out-Null
-  [Win32]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_ZERO) | Out-Null
-  Set-Alpha $hwnd 255
-  $style = [Win32]::GetWindowLong($hwnd, $GWL_EXSTYLE)
-  [Win32]::SetWindowLong($hwnd, $GWL_EXSTYLE, $style -band (-bnot $WS_EX_LAYERED)) | Out-Null
-  Write-Host "[transparent] 已恢复不透明并退出。"
-}
+Write-Host "[transparent] 完成。要改透明度重跑此脚本，要恢复用 -Opacity 100。"
+exit 0
