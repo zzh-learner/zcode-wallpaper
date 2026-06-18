@@ -37,5 +37,17 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("第两千章 matched", r.chapters.some(c => c.title.indexOf("涅盘圣体") !== -1));
 })();
 
+// volume + chapter on SAME line (回到明朝当王爷 format). Mirror of server case.
+(function(){
+  const text =
+    "卷一 烽火连三月 第一章 九世善人\n　　x\n" +
+    "卷一 烽火连三月 第二章 偷渡时空\n　　x\n" +
+    "卷二 闭着眼 第一章 入京\n　　x\n";
+  const r = parseTOC(text);
+  check("same-line chapters matched (3)", r.chapters.length === 3);
+  check("chapter title drops vol prefix", r.chapters[0].title === "第一章 九世善人");
+  check("volumes deduped (2)", r.volumes.length === 2);
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

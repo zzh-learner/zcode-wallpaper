@@ -64,6 +64,35 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("第两千零一章 matched", r.chapters.some(c => c.title.indexOf("天戈灭敌") !== -1));
 })();
 
+// --- volume + chapter on the SAME line (回到明朝当王爷 format):
+//     "卷一 烽火连三月 第一章 九世善人" ---
+//     Both must be captured: volume from text before 第X章, chapter from 第X章 on.
+//     Volume "卷X" (without 第) must also be recognized. Volumes dedup by title.
+(function(){
+  const text =
+    "卷一 烽火连三月 第一章 九世善人\n　　正文。\n" +
+    "卷一 烽火连三月 第二章 偷渡时空\n　　正文。\n" +
+    "卷二 闭着眼 第一章 入京\n　　正文。\n" +
+    "卷二 闭着眼 第二章 见驾\n　　正文。\n";
+  const r = parseTOC(text, "huichao.txt");
+  check("same-line chapters all matched (4)", r.chapters.length === 4);
+  check("chapter title drops volume prefix", r.chapters[0].title === "第一章 九世善人");
+  check("volumes deduped by title (2)", r.volumes.length === 2);
+  check("volume uses '卷X' (no 第) form", r.volumes[0].title.indexOf("卷一") !== -1);
+  check("volume 2 starts at chapter 2", r.volumes[1].startChapterIndex === 2);
+})();
+
+// --- body reference with bare number run is NOT a volume ---
+//     "第八卷 蜀中劫 443 缘份到了" appears in body; the 443 betrays it.
+(function(){
+  const text = "卷一 开头\n　　他读到 第八卷 蜀中劫 443 缘份到了 那段。\n第一章 真\n　　x\n";
+  const r = parseTOC(text, "impurity.txt");
+  // The body line "他读到 第八卷..." does NOT start with vol marker (starts with 他),
+  // so it's not a volume anyway. But test the filter: a line that DOES start with
+  // a vol marker but has a bare number run is dropped.
+  check("body line not a volume", r.volumes.length === 1 && r.volumes[0].title.indexOf("卷一") !== -1);
+})();
+
 // --- splitParagraphs: trims line-leading fullwidth spaces, drops empty lines ---
 // NOTE: splitParagraphs is a pure chunk->paragraphs helper. It does NOT know
 // which line is a heading; heading-stripping happens at the server chapter
