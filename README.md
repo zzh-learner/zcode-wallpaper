@@ -23,7 +23,7 @@
 ## 1. 安装
 
 ```bash
-git clone <你的仓库地址> zcode-wallpaper
+git clone https://github.com/zzh-learner/zcode-wallpaper.git zcode-wallpaper
 cd zcode-wallpaper
 ```
 
