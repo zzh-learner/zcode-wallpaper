@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZCode 阅读器</title>
+  <!-- relative href works in BOTH modes: http (index at /reader, resolves to
+       /reader/reader.css) and file:// (same dir). Avoid /absolute paths:
+       they break in file:// mode. -->
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body class="theme-dark">
+  <header id="topbar">
+    <button id="btn-shelf" title="书架/目录">☰</button>
+    <span id="title-bar">《<span id="book-name">未打开</span>》 · <span id="chap-name">—</span></span>
+    <span class="spacer"></span>
+    <button id="font-dec" title="字号 −">A−</button>
+    <button id="font-inc" title="字号 +">A+</button>
+    <button id="theme-toggle" title="主题">🌙</button>
+    <select id="enc-select" title="编码">
+      <option value="auto">自动</option>
+      <option value="utf8">UTF-8</option>
+      <option value="gb18030">GB18030</option>
+    </select>
+    <button id="refresh-shelf" title="刷新书单">⟳</button>
+  </header>
+
+  <div id="main">
+    <nav id="sidebar" class="collapsed">
+      <div id="shelf-list"></div>
+      <hr>
+      <div id="toc-list"></div>
+    </nav>
+    <section id="reader">
+      <div id="drop-hint">把 .txt 拖到这里开始阅读<br><small>（或启动 reader-server.bat 后从书架选书）</small></div>
+      <article id="chapter-content"></article>
+      <div id="chapter-nav">
+        <button id="prev-chap">← 上一章</button>
+        <button id="next-chap">下一章 →</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="err-banner" class="hidden"></div>
+
+  <!-- Pure-logic libs (work in Node too; tested separately) -->
+  <script src="lib/codec.js"></script>
+  <script src="lib/toc.js"></script>
+  <script src="lib/progress.js"></script>
+  <script src="lib/book.js"></script>
+  <!-- Main glue (only DOM code) -->
+  <script src="reader.js"></script>
+</body>
+</html>
