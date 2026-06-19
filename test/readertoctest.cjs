@@ -39,12 +39,17 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     r.volumes[0].title !== r.volumes[1].title || r.volumes.length === 2);
 })();
 
-// --- heading NOT on its own line (body mentions "翻开第一章") -> not a chapter ---
+// --- KNOWN TRADE-OFF: body mentions "翻开第一章" MAY be parsed as a (false) chapter ---
+// We deliberately do NOT guard against this. An earlier guard
+// (chapIdx===0 || volMatch) dropped legitimate headings prefixed by
+// 正文/外传/江湖篇/番外 ("正文 第一章 陨落的天才" in 斗破苍穹) — that was worse.
+// Accept the false positive: it shows up in the TOC and the user skips it.
+// This test documents the trade-off: the body line DOES get matched.
 (function(){
   const text = "他翻开第一章看了看。\n　　内容。\n";
   const r = parseTOC(text, "body.txt");
-  // "他翻开第一章看了看。" does NOT match /^第X章(\s|\u3000)/ because no space after 章
-  check("body mention not parsed as chapter", r.chapters.length === 1 && r.chapters[0].title === "全文");
+  check("body mention IS matched (accepted false positive — guard cost > benefit)",
+    r.chapters.length === 1 && r.chapters[0].title.indexOf("第一章") !== -1);
 })();
 
 // --- heading requires space/fullwidth-space separator after the marker ---
@@ -80,6 +85,21 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("volumes deduped by title (2)", r.volumes.length === 2);
   check("volume uses '卷X' (no 第) form", r.volumes[0].title.indexOf("卷一") !== -1);
   check("volume 2 starts at chapter 2", r.volumes[1].startChapterIndex === 2);
+})();
+
+// --- 节 unit (天擎/纨绔才子 format) + optional separator (惟我独仙 no-space) ---
+(function(){
+  const r1 = parseTOC("第一集   奔向黎明 第一节  来自麻省理工\n　　x\n第二节 佛曰\n　　x\n", "jie.txt");
+  check("节 unit matched as chapters (2)", r1.chapters.length === 2);
+  // optional separator: "第一集第一章登山拜师" (no space after 章)
+  const r2 = parseTOC("第一集第一章登山拜师\n　　x\n第一集第二章下山\n　　x\n", "nospace.txt");
+  check("no-space 第X集第X章 matched (2)", r2.chapters.length === 2);
+})();
+
+// --- 集/部/篇 as volume unit (not just 卷) ---
+(function(){
+  const r = parseTOC("第一部 寻梦 第一章 入学\n　　x\n第二部 追梦 第一章 出发\n　　x\n", "bu.txt");
+  check("部 volume unit recognized (2 vols)", r.volumes.length === 2);
 })();
 
 // --- body reference with bare number run is NOT a volume ---

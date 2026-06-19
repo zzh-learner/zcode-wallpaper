@@ -49,5 +49,14 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("volumes deduped (2)", r.volumes.length === 2);
 })();
 
+// 节 unit + optional separator (天擎/纨绔才子 format). Mirror of server.
+(function(){
+  const text = "第一集   奔向黎明 第一节  来自麻省理工\n　　x\n第二节 佛曰\n　　x\n";
+  const r = parseTOC(text);
+  check("节 unit matched (2)", r.chapters.length === 2);
+  check("optional separator: 第一集第一章 no-space style",
+    parseTOC("第一集第一章登山拜师\n　　x\n第一集第二章下山\n　　x\n").chapters.length === 2);
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

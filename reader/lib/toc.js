@@ -4,12 +4,17 @@
 // in memory so getChapter just slices text.slice(start,end).
 //
 // Keep in sync with lib/reader-toc.cjs — same robustness rules:
-// - 第X章 anywhere on line (not just 行首) — supports "卷一 ... 第一章 ..." same-line
-// - 第X卷 OR 卷X volume forms; dedupe by title; filter bare-number impurity
+// - 第X(章|节|回) anywhere on line, separator OPTIONAL
+//   (supports "卷一 ... 第一章 ..." same-line AND "第一集第一章" no-space)
+// - 第X卷 OR 卷X, unit 卷/集/部/篇; dedupe by title; filter bare-number impurity
 // - '两' numeral (两千 = 二千)
+// - NO body-mention guard: accepted false positive (see lib/reader-toc.cjs comment)
 
-const CHAPANY_RE = /第[一二两三四五六七八九十百千零0-9]+章(\s|\u3000)/;
-const VOLHEAD_RE = /^(?:第[一二两三四五六七八九十百千零0-9]+卷|卷[一二两三四五六七八九十百千零0-9]+)(\s|\u3000)/;
+var NUM = "[一二两三四五六七八九十百千零0-9]+";
+var CHAPANY_RE = new RegExp("第" + NUM + "(?:章|节|回)(?:\\s|\\u3000)?");
+var VOLHEAD_RE = new RegExp(
+  "^(?:第" + NUM + "(?:卷|集|部|篇)|(?:卷|集|部|篇)" + NUM + ")(?:\\s|\\u3000)?"
+);
 
 function parseTOC(text) {
   const lines = text.split(/\r?\n/);
