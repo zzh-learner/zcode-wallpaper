@@ -87,11 +87,17 @@
 ┌──────────────────────┐              ┌────────────────────────┐
 │ ✦新增 lib/status.cjs │              │ 动作逻辑（C1：spawn）  │
 │ 纯只读查询模块        │              │ inject.cjs（图/视频/移除）│
-│ • 复用 inject listTargets │         │ transparent.ps1（透明） │
+│ • require lib/cdp.cjs │              │ transparent.ps1（透明） │
 │ • alpha 查询（transparent │         │ resize.cjs（缩图）      │
-│   .ps1 -Query 只读）  │              │ setup.cjs（装依赖）     │
+│   .ps1 -Query -Json 只读）│          │ setup.cjs（装依赖）     │
 │ • 查进程/端口/资源     │              │ → server spawn，不改它们│
-└──────────────────────┘              └────────────────────────┘
+└──────────┬───────────┘              └────────────────────────┘
+           │ require（只读 CDP 能力也供 inject.cjs 复用）
+┌──────────▼───────────┐
+│ ✦新增 lib/cdp.cjs    │  ← 抽出 inject.cjs 未导出的 listTargets/
+│ 只读 CDP 共享模块     │     connect/httpGetJson + probeWallpaperMode
+│ inject.cjs 也改 require 它 │  （审查 P1-1）
+└──────────────────────┘
 ```
 
 ### 三个关键设计抉择（用户确认）
@@ -99,7 +105,7 @@
 | 抉择 | 选项 | 选定 | 理由 |
 |---|---|---|---|
 | A. 透明背景谁负责 | A1 页面自带透明 CSS / A2 复用 CDP 注入 | **A1** | 自包含，不依赖壁纸已注入；壁纸没注入时退化成 ZCode 默认底，可接受 |
-| B. 状态探查怎么做 | B1 内联查询 / B2 抽共享模块 | **B2 轻量** | 新增 `lib/status.cjs` 纯查询，复用 inject.cjs 的 `listTargets`，alpha 查询给 transparent.ps1 加 `-Query` 模式 |
+| B. 状态探查怎么做 | B1 内联查询 / B2 抽共享模块 | **B2 轻量** | 新增 `lib/status.cjs` 纯查询 + `lib/cdp.cjs` 只读 CDP 共享模块（审查 P1-1：inject.cjs 的 listTargets 未导出，必须抽出来），alpha 查询给 transparent.ps1 加 `-Query -Json` 模式 |
 | C. 动作怎么触发 | C1 spawn 现有命令 / C2 内联实现 | **C1** | 根除重复（教训 1），动作逻辑只有一份，控制中心只是触发器 |
 
 ---
@@ -119,15 +125,31 @@
 **A2. `lib/status.cjs`** ✦新增 —— 纯查询模块（B2 轻量）
 - **做什么**：导出一组**只读**查询函数，返回状态①~⑤快照
 - **怎么用**：`const s = require('./status.cjs'); await s.snapshot()`
-- **依赖**：复用 inject.cjs 已导出的 `listTargets` 查 CDP（②）；fs 查资源（⑤）；os/进程列表查 ZCode 进程（①）；spawn `transparent.ps1 -Query` 查 alpha（③）
+- **依赖**：`require('./cdp.cjs')` 查 CDP target + 壁纸 mode（②）；fs 查资源（⑤）；os/进程列表查 ZCode 进程（①）；spawn `transparent.ps1 -Query -Json` 查 alpha（③）
 - **职责边界**：**绝不修改任何状态**（只读）。alpha 查询用 transparent.ps1 的 `-Query` 模式（只 `GetLayeredWindowAttributes`，不 `Set`，教训 14 可回读）
 - **内部缓存**：alpha 查询做 500ms 去重缓存（spawn PS 较慢，避免拖慢 2s 轮询）
 
-**A3. `lib/transparent.ps1` 扩展** —— 加 `-Query` 模式（复用窗口选择，不新写文件）
-- **做什么**：现有设透明逻辑不动；新增 `-Query` 开关，**直接给 hwnd** 查该窗口当前 Layered alpha（0-255），纯只读
-- **为什么不走窗口枚举**：控制中心轮询不能 read-host。setTransparent 成功后 server 记下 hwnd，`-Query` 直接按 hwnd 查，跳过窗口选择（更快、回避多候选）。见 §10"alpha 查询的多窗口处理"。
-- **依赖**：只调 `GetLayeredWindowAttributes`（按 hwnd），不 `Set`
-- **职责边界**：`-Query` 模式绝不 `Set`。设透明时仍走原窗口选择逻辑（与 transparent.ps1 设透明时一致，transparenttest 钉死）
+**A2b. `lib/cdp.cjs`** ✦新增 —— 只读 CDP 能力共享模块（审查 P1-1）
+- **背景**：现有 inject.cjs 的 `listTargets`/`connect`/`httpGetJson` 是**内部函数未导出**（已核实 inject.cjs line 410-421 导出列表只有 toFileUrl/encodeFileUrl/listWallpapers/listVideos/pickRandom/buildExpression/buildVideoExpression/STYLE_ID/VIDEO_EL_ID/VIDEO_EXTS）。spec 原写"复用 inject.cjs 已导出的 listTargets"是事实错误。
+- **做什么**：把只读 CDP 能力抽成独立模块导出：`httpGetJson`、`listTargets`（带 target 过滤，见 §5.4）、`connect`、`probeWallpaperMode`（连 page target 查 DOM → image/video/none，封装原 inject.cjs main 内的 verifyExpression 逻辑）
+- **怎么用**：`const cdp = require('./cdp.cjs'); const pages = await cdp.listTargets()`
+- **inject.cjs 同步改造**：inject.cjs 改成 `require('./cdp.cjs')` 复用这些函数（消除重复，根除两份 CDP 胶水各自再坏一次的机会——教训 1 二次事故）。**不改变 inject.cjs 对外行为**（动作逻辑不动，只是 CDP 连接代码改 require）
+- **职责边界**：只做 CDP 连接 + 只读查询，不做注入动作。注入动作仍归 inject.cjs
+
+**A3. `lib/transparent.ps1` 扩展**（审查 P1-3，三处改动）
+- **现状核实**：现有 transparent.ps1 只有 `-ProcessName/-Opacity/-InitialAlpha` 参数；P/Invoke 只有 `SetLayeredWindowAttributes`，**没有 `GetLayeredWindowAttributes`**（已核实 line 34-42）；设透明成功只 `Write-Host` 人话（line 175），**没有机器可读的 hwnd 输出**。所以 spec 原写"加 `-Query` 分支就行"不够——需要三处改动：
+- **改动 1：新增 `GetLayeredWindowAttributes` P/Invoke**（只读，不改窗口）
+  ```csharp
+  [DllImport("user32.dll")] public static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint crKey, out byte bAlpha, out uint dwFlags);
+  ```
+- **改动 2：新增 `-Query` 参数 + `-Hwnd` 参数**，查询模式完全非交互（轮询不能 read-host）：
+  - `powershell -File transparent.ps1 -Query -Hwnd <n> -Json` → 按 hwnd 直接查 alpha，输出 `{"hwnd":n,"alpha":199,"opacityPct":78,"layered":true}`
+  - `powershell -File transparent.ps1 -Query -ProcessName ZCode -Json` → 没给 hwnd 时走窗口选择（多候选自动选面积最大，**不 read-host**），输出同上；找不到窗口输出 `{"hwnd":null,"alpha":null,"layered":false}` + exit 2
+  - `-Query` 模式绝不 `Set`
+- **改动 3：设透明模式加 `-Json` 输出 hwnd**，让 server 能建立"setTransparent → 后续 Query"链路：
+  - `powershell -File transparent.ps1 -Opacity 78 -Json` → 除了原人话输出，额外打印一行 `{"event":"set","hwnd":133212,"alpha":199,"opacityPct":78}`
+  - server 解析这行 JSON，记下 hwnd，后续轮询用 `-Query -Hwnd <n>` 直接查（跳过窗口枚举，快且回避多候选）
+- **断链场景（重要）**：server 重启、或用户从旧菜单（wallpaper.bat 场景 9/10）设透明 → server 不知道 hwnd → 查不到。处理：status.cjs 查不到 hwnd 时，`transparent` 项返回 `{ enabled:"unknown" }`（**不是 false**），前端显"透明状态未知（未通过控制中心设置）"，并提示"点'设透明'重设以纳入监控"。不误报"未启用"。
 - **BOM 要求**：transparent.ps1 有中文，**必须存 UTF-8 with BOM**（AGENTS.md 记录的坑）
 
 **A4. 动作执行器**（control-server.cjs 内的一个函数，不单独成文件）
@@ -221,12 +243,18 @@ action 白名单映射到 spawn 命令：
 | injectImage | `node lib/inject.cjs` |
 | injectVideo | `node lib/inject.cjs --video` |
 | remove | `node lib/inject.cjs --remove` |
-| setTransparent | `lib/transparent.ps1 -Opacity <pct>` |
+| setTransparent | `powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -Opacity <pct> -Json` |
 | resize | `node lib/resize.cjs` |
 | setup | `node lib/setup.cjs` |
 
+**spawn 契约（审查 P2-1，写死避免路径坑）**：
+- **node 命令**：用 `process.execPath`（当前 node 绝对路径），不用 PATH 里的 `node`
+- **PowerShell 命令**：必须 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <绝对路径>`（AGENTS.md 约定：PS 脚本一律 `-File`，绝不内联 `-Command`——bash 吞 `$xxx` 变量）。`-File` 参数用 transparent.ps1 的**绝对路径**
+- **脚本/工作目录**：`cwd` 设为**项目根**（WP_ROOT），所有 `lib/xxx` 相对此根
+- **绝对路径来源**：server 启动时用 `__dirname` 推算项目根（control-server.cjs 在 `lib/`，根 = `path.join(__dirname,'..')`），所有 spawn 路径基于这个根拼绝对路径。这样无论从 `bin/control-center.bat` 还是别的 cwd 启动 control-server，spawn 的子进程路径都正确
+
 - **并发控制**：全局一个动作锁，任意 action 进行中时新请求 `409 {"accepted":false,"reason":"busy","activeJob":"j_xxx"}`。不做队列（YAGNI）。
-- **成功判定**：不依赖 exit code，靠下一次 status 轮询的**真实 DOM 状态**为准（教训 3）。
+- **成功判定**：不依赖 exit code，靠下一次 status 轮询的**真实 DOM 状态**为准（教训 3）。setTransparent 的 hwnd 从 transparent.ps1 的 `-Json` 输出解析（见 §4 A3）。
 
 **3. `GET /api/job/:id` → 动作结果**（可选，状态轮询通常够了）
 ```jsonc
@@ -234,8 +262,8 @@ action 白名单映射到 spawn 命令：
 ```
 
 **4. 小说/书架 API（从 reader-server 迁入 + 扩展）**
+- **URL 路径契约（审查 OQ，落死）**：server 同时托管两个 SPA——`/control/`（控制中心，带尾斜杠，无尾斜杠 302 重定向）和 `/reader/`（阅读器，reader 体验零改动）。两者**并存**，调同一组 `/api/books*`。**旧入口 `reader-server.bat` 行为保持**：它启动 control-server（而非单独的 reader-server），粘出的 URL 仍是 `/reader/`，用户无感。不把 reader 改成 `/control/`（那会破坏已写进用户习惯/文档的 URL）。
 - `GET /api/books`、`GET /api/book/:id/toc`、`GET /api/book/:id/chapter/:n`（原有，从 reader-server 迁入）
-- **reader 体验不变**：reader SPA 仍走 `/reader/`，调的是同一组 `/api/books*`。迁移后 reader-server.bat 改为调 control-server.cjs（或保留为兼容别名）。reader 前端零改动。
 - 书架的**增删改在前端 localStorage**（复用 `progress.js`），server 不存书架状态
 - ✦新增关联修复：
   - `POST /api/book/resolve { staleBookId, hint }` → server 扫 novels/，按旧 filename 找现在叫什么
@@ -247,7 +275,19 @@ action 白名单映射到 spawn 命令：
 
 1. **/api/status 必须快（<300ms）**：每 2s 轮询。alpha 查询（spawn PS）较慢，用 500ms 缓存去重。
 2. **spawn 动作异步**：`/api/action` 立即返回 jobId，不等 spawn 完成。
-3. **端口自增沿用 reader-server**（17890→17891...），剪贴板写**实际**端口（教训：listen 成功后写）。
+3. **固定 canonical 端口 17890**（审查 P2-2）：书架/进度存 localStorage，而 localStorage 绑 origin（`http://127.0.0.1:17890` ≠ `:17891`），端口自增会让书架"看起来丢了"。所以**默认固定 17890**；只有 17890 被占且无法释放时才 +1 兜底，并把这种情况**作为异常明显提示**（前端横幅"端口已漂移到 N，书架进度可能不同步，建议关掉占用 17890 的程序重启"）。剪贴板仍写实际端口。
+
+### 5.4 CDP target 过滤规则（审查 P1-2）
+
+控制中心和 reader 自己运行在 ZCode webview 里，**它们也是 page target**。如果不过滤，① status 探测会把控制中心/reader 页算进 `pageTargets`/`injectedWindows`/`totalWindows`，mode 也会被污染；② inject.cjs 注入时也会误注入工具页。
+
+**过滤规则**（cdp.cjs 的 `listTargets` 实现）：
+- 只保留 `type === "page"` 且 `webSocketDebuggerUrl` 存在的 target（现有行为）
+- **额外排除**：`url` 以 `http://127.0.0.1:<serverPort>/` 或 `http://localhost:<serverPort>/` 开头的（控制中心 `/control/`、reader `/reader/`、及任何 server 自身页面）
+- **额外排除**：`url` 以 `devtools://` 开头的（DevTools 窗口）
+- 保留：ZCode 主页面（`file://`、`chrome-extension://`、ZCode 自有协议等非本地工具页）
+
+status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**的 target 集合。inject.cjs 注入也走同一过滤函数（cdp.cjs 导出），保证"探测"和"注入"看到同一批窗口。
 
 ---
 
@@ -320,6 +360,14 @@ action 白名单映射到 spawn 命令：
   - `alphaToOpacityPct(alpha)` / `opacityPctToAlpha(pct)` —— 0-255 ↔ 0-100 换算
 - 测什么：null 项不污染整体、mode 分类正确、换算边界（0/100/255）、缓存逻辑
 
+**1b. `test/cdptest.cjs`** —— 测 `lib/cdp.cjs` 的 target 过滤纯函数（审查 P1-1/P1-2）
+- `filterTargets(allTargets, serverPort)` —— 纯函数，喂 mock `/json` 数组，验过滤规则
+- 测什么：
+  - 排除 `http://127.0.0.1:<port>/control/`、`/reader/`、server 自身页
+  - 排除 `devtools://`
+  - 保留 ZCode 主页面（file:// / chrome-extension:// 等）
+  - port 匹配要准（17890 的工具页不被 17891 的 server 误排或误留）
+
 **2. `test/controlservertest.cjs`** —— 测 server 的 HTTP 层（沿用 readerservertest.cjs 模式）
 - 起 mock 占端口验自增
 - 验 `/control` → 302 `/control/`（教训 18a 钉死）
@@ -348,6 +396,8 @@ action 白名单映射到 spawn 命令：
 | E4 | **spawn 动作链** | server spawn inject.cjs，跨进程 + 命令链（教训 1） | 真机：点"移除"，验 inject.cjs 真被调（不是只验 server 返回 200），验下一轮 status 反映 none |
 | E5 | **/control 无尾斜杠重定向** | 浏览器相对路径解析，跨层（教训 18a） | 真机：webview 加载 /control，验 CSS/JS 不 404 |
 | E6 | **书架关联修复** | 涉及真实文件改名 + localStorage | 真机：novels/ 改文件名，验书架标 stale + 重拖关联 |
+| E7 | **CDP target 过滤（审查 P1-2）** | 真实 /json 含控制中心/reader 自己的 page target | 真机：控制中心开着时 curl /api/status，验 `pageTargets`/`totalWindows` **不含** `/control/`、`/reader/`（对照 /json 原始列表确认被过滤） |
+| E8 | **setTransparent→hwnd→Query 链路（审查 P1-3）** | 跨 PS 输出↔server 解析↔Query 回读，三段胶水 | 真机：点"设透明 78%"，验 server 从 `-Json` 输出解析到 hwnd 并存；下一轮 status 的 `transparent.opacityPct` 回读为 78；server 重启后该项变 `unknown`（断链场景） |
 
 写法约定：端到端脚本放 `scripts/`（如 `scripts/inspect-control.cjs`），一次性、设完即退、可回读（教训 14）。
 
@@ -365,6 +415,10 @@ action 白名单映射到 spawn 命令：
   - "/control 重定向" → 防教训 18a 复发
   - "spawn 动作被真实调用" → 防教训 1 复发（server 看着对但 inject 没跑）
   - "alpha 查询只读" → 防查询误改窗口状态
+  - "target 过滤排除工具页"（审查 P1-2）→ 防控制中心/reader 自己污染 status
+  - "cdp.cjs 被 inject 和 status 共用"（审查 P1-1）→ 防两份 CDP 胶水分裂（教训 1 二次事故）
+  - "setTransparent 输出 hwnd 且 Query 能回读"（审查 P1-3）→ 防断链误报
+  - "端口固定 17890"（审查 P2-2）→ 防 origin 漂移导致书架丢失
 
 ---
 
@@ -374,7 +428,7 @@ action 白名单映射到 spawn 命令：
 - **transparent.ps1 必须存 UTF-8 with BOM**（中文 + here-string，无 BOM 解析崩）。
 - **`.bat` 保持 ASCII-only**（中文由 node 打印）；`.bat` 必须 CRLF 行尾；`.bat` 的 `if/for` 块内 echo 别写裸括号。
 - **跨语言胶水（C#↔PS↔node）必端到端跑**：alpha 查询的 C# 拼字符串 ↔ PS 解析 ↔ node 接收，三段各自合法合起来可能错位（教训 3/12），必须真跑。
-- **不改 inject.cjs / transparent.ps1 的动作逻辑**，只给 transparent.ps1 加只读 `-Query` 分支。status.cjs 复用 inject.cjs **已导出**的函数（`listTargets` 等），不侵入。
+- **不改 inject.cjs / transparent.ps1 的动作逻辑**：transparent.ps1 只加只读 `-Query` 分支 + `-Json` 输出 + `GetLayeredWindowAttributes`（见 §4 A3）。CDP 只读能力（listTargets/connect/probeWallpaperMode）抽到 **新增的 `lib/cdp.cjs`**，inject.cjs 和 status.cjs 都 require 它（审查 P1-1）——这样既复用又消除两份 CDP 胶水各自再坏的机会。
 - **探测脚本优先**：遇到"为什么这个状态不对"，第一反应写探测脚本读真实 computed/state（教训 11），不靠脑子猜 DOM。
 - **Windows 保留名文件**（`nul` 等）删除用 `\\?\` 前缀 + `.ps1 -File` 跑（bash 吞反斜杠）。
 
@@ -385,18 +439,21 @@ action 白名单映射到 spawn 命令：
 ### 新增
 - `lib/control-server.cjs` —— 合并的常驻 HTTP server
 - `lib/status.cjs` —— 纯只读查询模块
+- `lib/cdp.cjs` —— 只读 CDP 能力共享模块（listTargets 带 target 过滤 / connect / httpGetJson / probeWallpaperMode），审查 P1-1
 - `control/` —— 前端 SPA 目录（index.html / control.css / control.js / lib/）
 - `control/lib/status-view.js` —— 状态渲染纯函数
 - `control/lib/shelf.js` —— 书架管理
 - `bin/control-center.bat` —— 独立常驻入口（对称 reader-server.bat）
 - `scripts/inspect-control.cjs` —— 端到端验证脚本
+- `test/cdptest.cjs` —— 测 cdp.cjs 的 target 过滤纯函数（审查 P1-2）
 - `test/statustest.cjs`、`test/controlservertest.cjs`、`test/shelftest.cjs`
 
 ### 修改
-- `lib/transparent.ps1` —— 加 `-Query` 只读分支（不改设透明逻辑）
-- `lib/reader-server.cjs` → 逻辑迁入 control-server.cjs（reader-server.bat 改为调 control-server，或保留为兼容入口）
+- `lib/transparent.ps1` —— 加 `-Query`/`-Hwnd`/`-Json` + `GetLayeredWindowAttributes` + 设透明输出 hwnd（三处改动，见 §4 A3，不改设透明逻辑）
+- `lib/inject.cjs` —— 改 `require('./cdp.cjs')` 复用只读 CDP 能力（消除重复，对外行为不变）
+- `lib/reader-server.cjs` → 小说/章节逻辑迁入 control-server.cjs；reader-server.bat 改为调 control-server（粘出的 URL 仍是 `/reader/`，用户无感）
 - `lib/menu.cjs` + `wallpaper.bat` —— 新增"启动控制中心"场景（场景 13）
-- `package.json` —— test 串联加新 test 文件
+- `package.json` —— test 串联加新 test 文件（cdptest/statustest/controlservertest/shelftest）
 - `test/menutest.cjs` —— 加新场景断言
 - `.gitignore` —— 若有新产物目录需忽略
 
@@ -407,10 +464,10 @@ action 白名单映射到 spawn 命令：
 - **alpha 查询的 PS 字段索引**：transparent.ps1 现有 Dump 是 6 字段（教训 3 踩过的坑）。`-Query` 分支要么复用现有 Dump（注意字段索引），要么单独写一个精简的 alpha-only Dump。**实现时必须逐字跑输出确认**（教训 15）。
 - **普通浏览器打开控制中心**：降级体验（没壁纸）。不做检测、不给提示（YAGNI，能用就行）。
 
-### alpha 查询的多窗口处理（已定）
+### alpha 查询的多窗口处理（已定，见 §4 A3 改动 2/3）
 
 控制中心自动轮询**不能 read-host**（会卡住），所以 alpha 查询的多候选处理与设透明时不同：
-- **控制中心在内存记"上次 setTransparent 的 hwnd"**（setTransparent 动作成功后 server 存下 hwnd）
-- alpha 查询**只查这个 hwnd**（直接 `GetLayeredWindowAttributes`，跳过窗口枚举/选择）
-- 没有记录的 hwnd（用户没通过控制中心设过透明）→ `transparent` 项返回 `{ enabled:false }`，前端显"未设透明"
-- 这样彻底回避多窗口 read-host 问题，且 alpha 查询单 HWND 极快（不用枚举所有窗口）
+- **控制中心在内存记"上次 setTransparent 的 hwnd"**（设透明加 `-Json` 输出 hwnd，server 解析后存下）
+- alpha 查询优先用 `-Query -Hwnd <n>` 直接查（跳过窗口枚举，快且回避多候选）
+- server 没记到 hwnd（重启 / 用户从旧菜单设透明）→ 用 `-Query -ProcessName ZCode` 兜底（多候选自动选面积最大，不 read-host）
+- 都查不到 → `transparent` 项 `{ enabled:"unknown" }`，前端提示"未通过控制中心设置"，不误报 false
