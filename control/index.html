@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>ZCode 控制中心</title>
+<link rel="stylesheet" href="control.css">
+</head>
+<body>
+  <div id="status-panel" class="panel"></div>
+  <div id="actions" class="panel">
+    <button data-action="injectImage">注入图片壁纸</button>
+    <button data-action="injectVideo">注入视频壁纸</button>
+    <button data-action="remove">移除壁纸</button>
+    <label>透明度 <input id="opacity" type="number" min="0" max="100" value="78">%
+      <button data-action="setTransparent">设透明</button></label>
+    <button data-action="resize">重新缩图</button>
+    <button data-action="setup">重装依赖</button>
+    <button id="open-reader">打开阅读器</button>
+    <span id="job-msg" class="muted"></span>
+  </div>
+  <div id="shelf-panel" class="panel"><h3>书架</h3><div id="shelf-list"></div></div>
+  <script src="lib/status-view.js"></script>
+  <script src="lib/shelf.js"></script>
+  <script src="control.js"></script>
+</body>
+</html>
