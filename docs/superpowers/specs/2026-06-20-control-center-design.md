@@ -131,8 +131,8 @@
 
 **A2b. `lib/cdp.cjs`** ✦新增 —— 只读 CDP 能力共享模块（审查 P1-1）
 - **背景**：现有 inject.cjs 的 `listTargets`/`connect`/`httpGetJson` 是**内部函数未导出**（已核实 inject.cjs line 410-421 导出列表只有 toFileUrl/encodeFileUrl/listWallpapers/listVideos/pickRandom/buildExpression/buildVideoExpression/STYLE_ID/VIDEO_EL_ID/VIDEO_EXTS）。spec 原写"复用 inject.cjs 已导出的 listTargets"是事实错误。
-- **做什么**：把只读 CDP 能力抽成独立模块导出：`httpGetJson`、`listTargets`（带 target 过滤，见 §5.4）、`connect`、`probeWallpaperMode`（连 page target 查 DOM → image/video/none，封装原 inject.cjs main 内的 verifyExpression 逻辑）
-- **怎么用**：`const cdp = require('./cdp.cjs'); const pages = await cdp.listTargets()`
+- **做什么**：把只读 CDP 能力抽成独立模块导出：`httpGetJson`、`listTargets`（内部调 `filterTargets`，见 §5.4）、`filterTargets`（纯函数，按路径前缀过滤，不依赖端口）、`connect`、`probeWallpaperMode`（连 page target 查 DOM → image/video/none，封装原 inject.cjs main 内的 verifyExpression 逻辑）
+- **怎么用**：`const cdp = require('./cdp.cjs'); const pages = await cdp.listTargets()`（无需传端口，过滤按路径前缀）
 - **inject.cjs 同步改造**：inject.cjs 改成 `require('./cdp.cjs')` 复用这些函数（消除重复，根除两份 CDP 胶水各自再坏一次的机会——教训 1 二次事故）。**不改变 inject.cjs 对外行为**（动作逻辑不动，只是 CDP 连接代码改 require）
 - **职责边界**：只做 CDP 连接 + 只读查询，不做注入动作。注入动作仍归 inject.cjs
 
@@ -149,7 +149,7 @@
 - **改动 3：设透明模式加 `-Json` 输出 hwnd**，让 server 能建立"setTransparent → 后续 Query"链路：
   - `powershell -File transparent.ps1 -Opacity 78 -Json` → 除了原人话输出，额外打印一行 `{"event":"set","hwnd":133212,"alpha":199,"opacityPct":78}`
   - server 解析这行 JSON，记下 hwnd，后续轮询用 `-Query -Hwnd <n>` 直接查（跳过窗口枚举，快且回避多候选）
-- **断链场景（重要）**：server 重启、或用户从旧菜单（wallpaper.bat 场景 9/10）设透明 → server 不知道 hwnd → 查不到。处理：status.cjs 查不到 hwnd 时，`transparent` 项返回 `{ enabled:"unknown" }`（**不是 false**），前端显"透明状态未知（未通过控制中心设置）"，并提示"点'设透明'重设以纳入监控"。不误报"未启用"。
+- **断链场景（重要，见 §10 透明状态机）**：server 重启 / 用户从旧菜单设透明 → server 无 hwnd → 走状态机"否"分支，用 `-Query -ProcessName` 兜底查（不直接报 unknown）。只有"ZCode 开着但多候选无法确定主窗口"才返回 `{enabled:"unknown"}`；其余（ZCode 没开 / 窗口明确未 layered）返回确定的 `false`。
 - **BOM 要求**：transparent.ps1 有中文，**必须存 UTF-8 with BOM**（AGENTS.md 记录的坑）
 
 **A4. 动作执行器**（control-server.cjs 内的一个函数，不单独成文件）
@@ -240,12 +240,16 @@ action 白名单映射到 spawn 命令：
 
 | action | spawn |
 |---|---|
+| startZcode | `bin\launch-zcode.bat`（启动 ZCode 带 debug port，审查 P1-startZcode） |
 | injectImage | `node lib/inject.cjs` |
 | injectVideo | `node lib/inject.cjs --video` |
 | remove | `node lib/inject.cjs --remove` |
 | setTransparent | `powershell -NoProfile -ExecutionPolicy Bypass -File lib/transparent.ps1 -Opacity <pct> -Json` |
 | resize | `node lib/resize.cjs` |
 | setup | `node lib/setup.cjs` |
+
+**为什么需要 startZcode（审查 P1-startZcode）**：控制中心跑在 ZCode webview 里，但用户正常打开 ZCode **不带** `--remote-debugging-port`，CDP 9222 不存在 → 图片/视频注入必败。原 wallpaper.bat 场景 2/7 就是 launch-zcode.bat 干这个。所以控制中心必须能触发"带 debug port 启动 ZCode"。前端在 status 检测到 `zcode.debugPort` 不通时，提示并启用"启动 ZCode（调试模式）"按钮。
+- **注意**：startZcode 会启动一个**新** ZCode 进程。若已有 ZCode 在跑（无 debug port），launch-zcode.bat 现有逻辑会处理（见 bin/launch-zcode.bat）。控制中心不自己判断，spawn 后靠下一轮 status 反映。
 
 **spawn 契约（审查 P2-1，写死避免路径坑）**：
 - **node 命令**：用 `process.execPath`（当前 node 绝对路径），不用 PATH 里的 `node`
@@ -281,13 +285,17 @@ action 白名单映射到 spawn 命令：
 
 控制中心和 reader 自己运行在 ZCode webview 里，**它们也是 page target**。如果不过滤，① status 探测会把控制中心/reader 页算进 `pageTargets`/`injectedWindows`/`totalWindows`，mode 也会被污染；② inject.cjs 注入时也会误注入工具页。
 
-**过滤规则**（cdp.cjs 的 `listTargets` 实现）：
+**过滤规则**（cdp.cjs 的 `filterTargets(targets)` 实现，**纯函数、按路径前缀、不按端口**——审查 P1-target过滤端口）：
 - 只保留 `type === "page"` 且 `webSocketDebuggerUrl` 存在的 target（现有行为）
-- **额外排除**：`url` 以 `http://127.0.0.1:<serverPort>/` 或 `http://localhost:<serverPort>/` 开头的（控制中心 `/control/`、reader `/reader/`、及任何 server 自身页面）
-- **额外排除**：`url` 以 `devtools://` 开头的（DevTools 窗口）
+- **按路径前缀排除**（host = localhost 或 127.0.0.1，**任意端口**）：path 以 `/control/`、`/reader/`、`/api/` 开头的。这样不依赖 server 知道自己端口——standalone inject.cjs 从旧菜单跑、或 server 端口漂移到 17891 时，工具页照样被正确排除
+- **排除**：`url` 以 `devtools://` 开头的（DevTools 窗口）
 - 保留：ZCode 主页面（`file://`、`chrome-extension://`、ZCode 自有协议等非本地工具页）
+- `filterTargets(targets)` 是纯函数，单测覆盖（cdptest 喂含各端口工具页的 mock，验全排除）。`listTargets()` 内部调它，无需调用方传端口
 
-status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**的 target 集合。inject.cjs 注入也走同一过滤函数（cdp.cjs 导出），保证"探测"和"注入"看到同一批窗口。
+**注入/移除怎么用过滤（mode-aware，审查 P2-remove）**：
+- **image/video 注入**：走 `filterTargets`（只注入 ZCode 主页面，不污染工具页）
+- **remove（移除壁纸）**：**不过滤，对所有 page target 做无害清理**。理由：remove 只是删 `#zcode-user-wallpaper` style 和 `#zcode-user-wallpaper-video` 元素（不存在则 no-op），无害；若工具页曾被旧版本/未过滤版本注入过残留，remove 必须能清掉。所以 remove 覆盖全量 page target，inject/video 只覆盖过滤后的。
+- status 探测（`wallpaper.mode`/`totalWindows`）用 `filterTargets` 后的集合（避免工具页污染计数）
 
 ---
 
@@ -298,8 +306,9 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 | 情况 | 处理 | 用户看到 |
 |---|---|---|
 | node 没装 | server 启动前探测，友好提示（对称 wallpaper.bat 的 node 预检） | "需要 Node.js" |
-| 端口 17890 被占 | 自动 +1（沿用 reader-server），最多 5 次 | 剪贴板写实际端口 + 控制中心提示当前端口 |
+| 端口 17890 被占 | **固定 17890 优先**（见 §5.3）；被占且无法释放才 +1 兜底 + 横幅提示 | 剪贴板写实际端口 + 横幅"端口漂移" |
 | webview 加载 `/control`（无尾斜杠）404 | server `/control` → 302 `/control/`（教训 18a） | 正常加载，不空白 |
+| **ZCode 没带 debug port** | 用户正常开 ZCode 不带 `--remote-debugging-port` → CDP 9222 不通 → 注入必败。**前端检测 `zcode.debugPort` 不通时，提示并启用"启动 ZCode（调试模式）"按钮**（startZcode action，审查 P1-startZcode） | 状态条 ZCode 项显"调试端口未开"，按钮亮起 |
 | ZCode 没开用户点"注入" | spawn 的 inject.cjs 自己报"连不上调试端口"；server 捕获 exit code，记 job.failed | 状态条壁纸项显"未注入" |
 
 ### 6.2 状态探查类（查询失败，教训 2/3）
@@ -307,8 +316,8 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 | 情况 | 处理 |
 |---|---|
 | CDP 连不上（ZCode 没开/没带 debug port） | `wallpaper`/`zcode` 项填 `null` + probeErrors，不抛 |
-| 透明 alpha 查询失败（进程名不对/多窗口选错） | `transparent` 项 `null`，不阻塞其它项 |
-| spawn PS 查 alpha 超时（>2s） | status.cjs 给 PS 设超时，超时该项 `null` |
+| 透明查询返回**确定结果**（true/false/unknown） | 按状态机填（§10），不是 null。unknown 只在多候选无法确定主窗口时 |
+| 透明查询**本身失败**（spawn PS 报错/超时 >2s） | status.cjs 给 PS 设超时；失败时 `transparent` 项 `null` + probeErrors，不阻塞其它项 |
 | 资源目录不存在（wallpapers-video/ 没建） | `fs.readdirSync` 包 try-catch 返回 0（沿用 inject.cjs listVideos 写法） |
 
 **核心原则**：探查失败不致命。任一项挂，整体 status 仍 200，前端单项显示"未知"。
@@ -321,7 +330,7 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 | spawn 的进程 crash / exit 非 0 | 记 job.state=failed + exitCode + output 尾部。前端显红 + 可看输出 |
 | spawn 超时（>30s） | server 给 spawn 设超时，kill，记 failed |
 | spawn 成功但状态没变（教训 3 典型） | 不依赖 exit code 判成功，靠**下一次 status 轮询的真实 DOM 状态**为准 |
-| 透明窗口重建（ZCode 重启 HWND 变了） | alpha 查询每次重选窗口（不持久化 hwnd）。透明项自然反映 enabled:false |
+| 透明窗口重建（ZCode 重启 HWND 变了） | 走透明状态机的"server 无 hwnd"分支：用 `-Query -ProcessName` 兜底查新窗口。见 §10 透明状态机 |
 
 ### 6.4 书架/数据类
 
@@ -342,7 +351,7 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 ### 6.6 并发/一致性
 
 - status 轮询和 action 执行可能交叉。**status 是只读快照，查的是某一刻真实状态，中间态可接受**（用户多看一次轮询就准）。不做事务。
-- 多个 webview 同时打开控制中心：共享一个 server，各自轮询，localStorage 按 webview partition 独立。无冲突。
+- 多个 webview 同时打开控制中心：共享一个 server，各自轮询。localStorage 在**同一 `persist:zcode-embedded-browser` partition + 同 origin 下是共享的**（不是独立——审查 P3），语义是"共享，最后写入生效"。所以多个控制中心实例并发写书架/偏好时是 last-write-wins，不存在"各自独立互不影响"。实际多实例极少见，last-write-wins 可接受；前端不做跨实例同步（YAGNI）。
 
 ---
 
@@ -360,13 +369,13 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
   - `alphaToOpacityPct(alpha)` / `opacityPctToAlpha(pct)` —— 0-255 ↔ 0-100 换算
 - 测什么：null 项不污染整体、mode 分类正确、换算边界（0/100/255）、缓存逻辑
 
-**1b. `test/cdptest.cjs`** —— 测 `lib/cdp.cjs` 的 target 过滤纯函数（审查 P1-1/P1-2）
-- `filterTargets(allTargets, serverPort)` —— 纯函数，喂 mock `/json` 数组，验过滤规则
+**1b. `test/cdptest.cjs`** —— 测 `lib/cdp.cjs` 的 target 过滤纯函数（审查 P1-1/P1-2/P1-target过滤端口）
+- `filterTargets(targets)` —— 纯函数，喂 mock `/json` 数组，验过滤规则（**不按端口**）
 - 测什么：
-  - 排除 `http://127.0.0.1:<port>/control/`、`/reader/`、server 自身页
+  - 排除 path 以 `/control/`、`/reader/`、`/api/` 开头的（host localhost/127.0.0.1，**任意端口**——验 17890 和 17891 的工具页都被排除）
   - 排除 `devtools://`
   - 保留 ZCode 主页面（file:// / chrome-extension:// 等）
-  - port 匹配要准（17890 的工具页不被 17891 的 server 误排或误留）
+  - 不依赖调用方传端口（standalone inject.cjs 也能正确过滤）
 
 **2. `test/controlservertest.cjs`** —— 测 server 的 HTTP 层（沿用 readerservertest.cjs 模式）
 - 起 mock 占端口验自增
@@ -397,7 +406,7 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 | E5 | **/control 无尾斜杠重定向** | 浏览器相对路径解析，跨层（教训 18a） | 真机：webview 加载 /control，验 CSS/JS 不 404 |
 | E6 | **书架关联修复** | 涉及真实文件改名 + localStorage | 真机：novels/ 改文件名，验书架标 stale + 重拖关联 |
 | E7 | **CDP target 过滤（审查 P1-2）** | 真实 /json 含控制中心/reader 自己的 page target | 真机：控制中心开着时 curl /api/status，验 `pageTargets`/`totalWindows` **不含** `/control/`、`/reader/`（对照 /json 原始列表确认被过滤） |
-| E8 | **setTransparent→hwnd→Query 链路（审查 P1-3）** | 跨 PS 输出↔server 解析↔Query 回读，三段胶水 | 真机：点"设透明 78%"，验 server 从 `-Json` 输出解析到 hwnd 并存；下一轮 status 的 `transparent.opacityPct` 回读为 78；server 重启后该项变 `unknown`（断链场景） |
+| E8 | **setTransparent→hwnd→Query 链路（审查 P1-3）** | 跨 PS 输出↔server 解析↔Query 回读，三段胶水 | 真机：点"设透明 78%"，验 server 从 `-Json` 输出解析到 hwnd 并存；下一轮 status 的 `transparent.opacityPct` 回读为 78；server 重启后走 `-ProcessName` 兜底（§10 状态机"否"分支），ZCode 开着应仍能查到同样的 opacityPct（不变成 unknown） |
 
 写法约定：端到端脚本放 `scripts/`（如 `scripts/inspect-control.cjs`），一次性、设完即退、可回读（教训 14）。
 
@@ -451,7 +460,7 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 ### 修改
 - `lib/transparent.ps1` —— 加 `-Query`/`-Hwnd`/`-Json` + `GetLayeredWindowAttributes` + 设透明输出 hwnd（三处改动，见 §4 A3，不改设透明逻辑）
 - `lib/inject.cjs` —— 改 `require('./cdp.cjs')` 复用只读 CDP 能力（消除重复，对外行为不变）
-- `lib/reader-server.cjs` → 小说/章节逻辑迁入 control-server.cjs；reader-server.bat 改为调 control-server（粘出的 URL 仍是 `/reader/`，用户无感）
+- `lib/reader-server.cjs` → 小说/章节逻辑迁入 control-server.cjs；**reader-server.cjs 保留作兼容 wrapper**（仍 `module.exports = { createServer }` 委托 control-server），因为 `test/readerservertest.cjs` line 31 直接 `require("../lib/reader-server.cjs")` 用 createServer（审查 P2-reader迁移）。reader-server.bat 改为调 control-server（粘出的 URL 仍是 `/reader/`，用户无感）。readerservertest 不动。
 - `lib/menu.cjs` + `wallpaper.bat` —— 新增"启动控制中心"场景（场景 13）
 - `package.json` —— test 串联加新 test 文件（cdptest/statustest/controlservertest/shelftest）
 - `test/menutest.cjs` —— 加新场景断言
@@ -464,10 +473,28 @@ status 的 `zcode.pageTargets` / `wallpaper.totalWindows` 都基于**过滤后**
 - **alpha 查询的 PS 字段索引**：transparent.ps1 现有 Dump 是 6 字段（教训 3 踩过的坑）。`-Query` 分支要么复用现有 Dump（注意字段索引），要么单独写一个精简的 alpha-only Dump。**实现时必须逐字跑输出确认**（教训 15）。
 - **普通浏览器打开控制中心**：降级体验（没壁纸）。不做检测、不给提示（YAGNI，能用就行）。
 
-### alpha 查询的多窗口处理（已定，见 §4 A3 改动 2/3）
+### 透明状态机（单一权威定义，审查 P2-透明状态机）
 
-控制中心自动轮询**不能 read-host**（会卡住），所以 alpha 查询的多候选处理与设透明时不同：
-- **控制中心在内存记"上次 setTransparent 的 hwnd"**（设透明加 `-Json` 输出 hwnd，server 解析后存下）
-- alpha 查询优先用 `-Query -Hwnd <n>` 直接查（跳过窗口枚举，快且回避多候选）
-- server 没记到 hwnd（重启 / 用户从旧菜单设透明）→ 用 `-Query -ProcessName ZCode` 兜底（多候选自动选面积最大，不 read-host）
-- 都查不到 → `transparent` 项 `{ enabled:"unknown" }`，前端提示"未通过控制中心设置"，不误报 false
+控制中心自动轮询**不能 read-host**。§4 A3、§6.3、本节都以此为准（消除 v2 里 false/unknown/自动猜窗口三处打架）。
+
+查询决策树（status.cjs 每次 snapshot 走一遍）：
+
+```
+server 内存有 hwnd？（用户通过控制中心 setTransparent 过，且没重启）
+├─ 是 → transparent.ps1 -Query -Hwnd <n> -Json
+│       ├─ layered 且 alpha<255 → { enabled:true,  opacityPct, hwnd:n }
+│       └─ 未 layered / alpha=255 → { enabled:false }   ← hwnd 失效（窗口已恢复/重建）
+└─ 否（server 重启 / 用户从旧菜单设的 / 没设过）→ transparent.ps1 -Query -ProcessName ZCode -Json
+        （多候选自动选面积最大，不 read-host）
+        ├─ ZCode 没开 → { enabled:false }              ← 确定没透明
+        ├─ 查到窗口、layered、alpha<255 → { enabled:true, opacityPct, hwnd } + server 顺手记下 hwnd（后续走"是"分支）
+        ├─ 查到窗口、未 layered / alpha=255 → { enabled:false }
+        └─ ZCode 开着但多候选无法确定主窗口 → { enabled:"unknown" }  ← 唯一 unknown 场景，极罕见
+```
+
+**false vs unknown 边界（定死）**：
+- `enabled:false` = 确定没透明（ZCode 没开 / 窗口明确未 layered / alpha=255）
+- `enabled:"unknown"` = **只**在"ZCode 开着但无法确定该查哪个窗口"时（多候选且无 hwnd 线索）。不是"没 hwnd 就 unknown"
+- 前端：false 显"未启用透明"，unknown 显"透明状态未知，建议在控制中心重设以纳入监控"
+
+setTransparent 成功后，server 从 `-Json` 的 `{"event":"set","hwnd":...}` 解析 hwnd 存内存——后续查询走"是"分支（快、准）。
