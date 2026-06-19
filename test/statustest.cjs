@@ -24,5 +24,30 @@ check("merge null wallpaper -> null field", merged.wallpaper === null);
 check("merge records probeErrors for nulls", Array.isArray(merged._meta.probeErrors) && merged._meta.probeErrors.length === 2);
 check("merge _meta.fetchedAt is number", typeof merged._meta.fetchedAt === "number");
 
-console.log("\n" + pass + " passed, " + fail + " failed");
-process.exit(fail === 0 ? 0 : 1);
+// === snapshot() with tmp project root (no ZCode on 9222 in test env) ===
+const fs = require("fs"), os = require("os"), path = require("path");
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-root-"));
+  for (const d of ["wallpapers", "wallpapers-thumb", "wallpapers-video", "novels"]) {
+    fs.mkdirSync(path.join(root, d), { recursive: true });
+  }
+  fs.writeFileSync(path.join(root, "wallpapers", "a.jpg"), "x");
+  fs.writeFileSync(path.join(root, "novels", "b.txt"), "x");
+  fs.mkdirSync(path.join(root, "node_modules", "sharp"), { recursive: true });
+  fs.writeFileSync(path.join(root, "node_modules", "sharp", "package.json"), "{}");
+  fs.mkdirSync(path.join(root, "node_modules", "ws"), { recursive: true });
+  fs.writeFileSync(path.join(root, "node_modules", "ws", "package.json"), "{}");
+
+  const s = await status.snapshot({ root, transparentHwnd: null });
+  check("snapshot resources counts images", s.resources.images === 1);
+  check("snapshot resources counts novels", s.resources.novels === 1);
+  check("snapshot resources thumbs 0", s.resources.thumbs === 0);
+  check("snapshot deps sharp true", s.resources.deps.sharp === true);
+  check("snapshot deps ws true", s.resources.deps.ws === true);
+  // zcode: either {running:true,...} (ZCode up) or null (CDP down). Either way
+  // it must NOT crash. Don't assume CDP down — test env may have ZCode running.
+  check("snapshot zcode is object-or-null (no crash)", s.zcode === null || (s.zcode && typeof s.zcode.running === "boolean"));
+  check("snapshot _meta always has probeErrors array", Array.isArray(s._meta.probeErrors));
+  console.log("\n" + pass + " passed, " + fail + " failed");
+  process.exit(fail === 0 ? 0 : 1);
+})();
