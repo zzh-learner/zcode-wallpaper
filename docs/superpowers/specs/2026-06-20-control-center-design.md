@@ -240,7 +240,6 @@ action 白名单映射到 spawn 命令：
 
 | action | spawn |
 |---|---|
-| startZcode | `bin\launch-zcode.bat`（启动 ZCode 带 debug port，审查 P1-startZcode） |
 | injectImage | `node lib/inject.cjs` |
 | injectVideo | `node lib/inject.cjs --video` |
 | remove | `node lib/inject.cjs --remove` |
@@ -248,8 +247,9 @@ action 白名单映射到 spawn 命令：
 | resize | `node lib/resize.cjs` |
 | setup | `node lib/setup.cjs` |
 
-**为什么需要 startZcode（审查 P1-startZcode）**：控制中心跑在 ZCode webview 里，但用户正常打开 ZCode **不带** `--remote-debugging-port`，CDP 9222 不存在 → 图片/视频注入必败。原 wallpaper.bat 场景 2/7 就是 launch-zcode.bat 干这个。所以控制中心必须能触发"带 debug port 启动 ZCode"。前端在 status 检测到 `zcode.debugPort` 不通时，提示并启用"启动 ZCode（调试模式）"按钮。
-- **注意**：startZcode 会启动一个**新** ZCode 进程。若已有 ZCode 在跑（无 debug port），launch-zcode.bat 现有逻辑会处理（见 bin/launch-zcode.bat）。控制中心不自己判断，spawn 后靠下一轮 status 反映。
+**为什么没有 startZcode action（审查 P1-startZcode，经反思推翻原解法）**：控制中心跑在 ZCode webview 里，用户正常打开 ZCode **不带** `--remote-debugging-port`，CDP 9222 不存在 → 注入必败。审查建议加 startZcode action（spawn launch-zcode.bat），但**这是错的解法**：launch-zcode.bat Step 1 会 `taskkill /f /im ZCode.exe`（已核实 bin/launch-zcode.bat line 46-54），会**杀掉当前 ZCode** → 控制中心自己（在 webview 里）连同整个 ZCode 一起被杀，按钮把自己干掉了。
+- **采用方案（用户定 1a）**：**不**提供 startZcode action。前端检测到 `zcode.debugPort` 不通时，**禁用**所有依赖 CDP 的按钮（injectImage/injectVideo/remove）+ 显示引导文案"壁纸功能需要带调试端口的 ZCode。请关闭 ZCode，双击 wallpaper.bat 场景 2（日常启动带壁纸）重新启动"。透明/阅读器/资源盘点等不依赖 CDP 的功能不受影响，仍可用。
+- 这样控制中心永不自杀，用户在外部重启 ZCode 后，下一轮 status 自动检测到端口通，按钮恢复。
 
 **spawn 契约（审查 P2-1，写死避免路径坑）**：
 - **node 命令**：用 `process.execPath`（当前 node 绝对路径），不用 PATH 里的 `node`
@@ -292,10 +292,9 @@ action 白名单映射到 spawn 命令：
 - 保留：ZCode 主页面（`file://`、`chrome-extension://`、ZCode 自有协议等非本地工具页）
 - `filterTargets(targets)` 是纯函数，单测覆盖（cdptest 喂含各端口工具页的 mock，验全排除）。`listTargets()` 内部调它，无需调用方传端口
 
-**注入/移除怎么用过滤（mode-aware，审查 P2-remove）**：
-- **image/video 注入**：走 `filterTargets`（只注入 ZCode 主页面，不污染工具页）
-- **remove（移除壁纸）**：**不过滤，对所有 page target 做无害清理**。理由：remove 只是删 `#zcode-user-wallpaper` style 和 `#zcode-user-wallpaper-video` 元素（不存在则 no-op），无害；若工具页曾被旧版本/未过滤版本注入过残留，remove 必须能清掉。所以 remove 覆盖全量 page target，inject/video 只覆盖过滤后的。
-- status 探测（`wallpaper.mode`/`totalWindows`）用 `filterTargets` 后的集合（避免工具页污染计数）
+**注入/移除/探测统一走 filterTargets（审查 P2-remove 经反思回退）**：
+- image/video 注入、remove、status 探测（`wallpaper.mode`/`totalWindows`）**都走 `filterTargets`**，三者看同一批窗口（ZCode 主页面，排除工具页）。
+- 审查曾建议 remove 做成 mode-aware（不过滤、对全量 page 清理），理由是"工具页可能有旧版本注入残留"。**回退此建议（用户定 2 回退）**：工具页（控制中心/reader）是我们自己的页面，从未被注入壁纸，"旧版本残留"是假想场景；为假想场景加 mode-aware 分支违反 YAGNI。remove 走过滤后若工具页真有残留（实际不会），影响也只是少清一个工具页（下次刷新即恢复），代价可接受。
 
 ---
 
@@ -308,7 +307,7 @@ action 白名单映射到 spawn 命令：
 | node 没装 | server 启动前探测，友好提示（对称 wallpaper.bat 的 node 预检） | "需要 Node.js" |
 | 端口 17890 被占 | **固定 17890 优先**（见 §5.3）；被占且无法释放才 +1 兜底 + 横幅提示 | 剪贴板写实际端口 + 横幅"端口漂移" |
 | webview 加载 `/control`（无尾斜杠）404 | server `/control` → 302 `/control/`（教训 18a） | 正常加载，不空白 |
-| **ZCode 没带 debug port** | 用户正常开 ZCode 不带 `--remote-debugging-port` → CDP 9222 不通 → 注入必败。**前端检测 `zcode.debugPort` 不通时，提示并启用"启动 ZCode（调试模式）"按钮**（startZcode action，审查 P1-startZcode） | 状态条 ZCode 项显"调试端口未开"，按钮亮起 |
+| **ZCode 没带 debug port** | 用户正常开 ZCode 不带 `--remote-debugging-port` → CDP 9222 不通 → 注入必败。**前端检测 `zcode.debugPort` 不通时，禁用所有依赖 CDP 的按钮（inject/remove）+ 引导文案**（审查 P1-startZcode，用户定方案 1a，不自杀）。透明/阅读器/资源盘点不受影响 | 状态条 ZCode 项显"调试端口未开"，壁纸按钮灰 + 引导"请从 wallpaper.bat 场景 2 重启 ZCode" |
 | ZCode 没开用户点"注入" | spawn 的 inject.cjs 自己报"连不上调试端口"；server 捕获 exit code，记 job.failed | 状态条壁纸项显"未注入" |
 
 ### 6.2 状态探查类（查询失败，教训 2/3）
