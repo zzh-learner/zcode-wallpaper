@@ -56,6 +56,7 @@ function httpGet(url) {
     const ch = JSON.parse((await httpGet(base + "/api/book/" + id + "/chapter/0")).body);
     check("/chapter has paragraphs array", Array.isArray(ch.paragraphs) && ch.paragraphs.length >= 1);
     check("/chapter paragraphs include 正文一", ch.paragraphs.some(p => p.indexOf("正文一") !== -1));
+    check("/chapter paragraphs do NOT include heading line", !ch.paragraphs.some(p => p === "第一章 开头"));
     check("/chapter prev/next fields present", "prev" in ch && "next" in ch);
 
     // out-of-range chapter -> 404

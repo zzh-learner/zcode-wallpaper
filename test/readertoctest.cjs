@@ -126,5 +126,39 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("splitParagraphs stripped fullwidth leading spaces", ps[1][0] !== "\u3000");
 })();
 
+// --- CRLF offset correctness (real bug: 回到明朝当王爷 UTF-16LE+CRLF,
+//     startOffset drifted ~55k chars, first chapter bled into book intro) ---
+(function(){
+  const text = "书籍介绍\r\n　　intro text here.\r\n第一章 开头\r\n　　正文一。\r\n第二章 结尾\r\n　　正文二。\r\n";
+  const r = parseTOC(text, "crlf.txt");
+  const expected = "书籍介绍\r\n　　intro text here.\r\n第一章 开头\r\n　　正文一。\r\n".length;
+  check("CRLF: ch1 startOffset lands exactly at 第二章 line",
+    r.chapters[1].startOffset === expected);
+  check("CRLF: ch0 chunk does NOT contain intro text",
+    !text.slice(r.chapters[0].startOffset, r.chapters[0].endOffset).includes("intro text"));
+})();
+
+// --- cleanChapterParagraphs: drop heading (with vol prefix) + metadata ---
+// Real bug: 回到明朝 ch0 body showed "卷一 烽火连三月 第一章 九世善人" (heading
+// with vol prefix) and "更新时间:..." (per-chapter metadata). Both must be dropped.
+(function(){
+  const { cleanChapterParagraphs } = require("../lib/reader-toc.cjs");
+  const title = "第一章 九世善人";
+  const paras = [
+    "卷一 烽火连三月 第一章 九世善人",
+    "更新时间:2006-12-19 10:16:00 本章字数:4597",
+    "本章字数:4597",
+    "狭窄幽长的奈何桥，横跨在忘川河上。",
+    "第一章 九世善人",
+  ];
+  const cleaned = cleanChapterParagraphs(paras, title);
+  check("cleanChapterParagraphs drops heading-with-vol-prefix", !cleaned.some(p => p === "卷一 烽火连三月 第一章 九世善人"));
+  check("cleanChapterParagraphs drops 更新时间 metadata", !cleaned.some(p => p === "更新时间:2006-12-19 10:16:00 本章字数:4597"));
+  check("cleanChapterParagraphs drops 本章字数 metadata", !cleaned.some(p => p === "本章字数:4597"));
+  check("cleanChapterParagraphs drops exact-title line", !cleaned.some(p => p === "第一章 九世善人"));
+  check("cleanChapterParagraphs keeps real body", cleaned.some(p => p.indexOf("狭窄幽长的奈何桥") !== -1));
+  check("cleanChapterParagraphs result has only the body paragraph", cleaned.length === 1);
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

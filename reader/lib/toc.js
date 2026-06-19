@@ -17,7 +17,9 @@ var VOLHEAD_RE = new RegExp(
 );
 
 function parseTOC(text) {
-  const lines = text.split(/\r?\n/);
+  // Keep newline with each line (lookbehind split) so offset = true char index.
+  // Fixes CRLF drift (回到明朝当王爷 was off by 1/line, ~55k total).
+  const lines = text.split(/(?<=\r?\n)/);
   const chapters = [], volumes = [];
   let offset = 0;
   let lastVolTitle = null;
@@ -38,7 +40,7 @@ function parseTOC(text) {
     if (hasChap) {
       chapters.push({ title: line.slice(chapIdx).trim(), startOffset: offset });
     }
-    offset += raw.length + 1;
+    offset += raw.length; // raw includes its own \r\n
   }
   for (let i = 0; i < chapters.length; i++) {
     chapters[i].endOffset = (i + 1 < chapters.length) ? chapters[i + 1].startOffset : text.length;
@@ -51,10 +53,27 @@ function splitParagraphs(chunk) {
   return chunk.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
 }
 
+// Clean chapter paragraphs: drop heading line (may carry volume prefix) +
+// drop web-novel metadata lines. Mirror of lib/reader-toc.cjs.
+var META_RE = /^(更新时间|本章字数|字数|发布时间|本章共|首发|更多精彩|请记住|无弹窗|免费阅读)/;
+function cleanChapterParagraphs(paras, title) {
+  var out = [];
+  var titleTrim = (title || "").trim();
+  for (var i = 0; i < paras.length; i++) {
+    var p = paras[i];
+    if (titleTrim && p.length >= titleTrim.length &&
+        p.slice(p.length - titleTrim.length) === titleTrim) continue;
+    if (p === titleTrim) continue;
+    if (META_RE.test(p)) continue;
+    out.push(p);
+  }
+  return out;
+}
+
 // Expose: CommonJS (Node test) + browser global (reader.js/book.js use window.__readerToc).
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseTOC, splitParagraphs, CHAPANY_RE, VOLHEAD_RE };
+  module.exports = { parseTOC, splitParagraphs, cleanChapterParagraphs, CHAPANY_RE, VOLHEAD_RE, META_RE };
 }
 if (typeof window !== "undefined") {
-  window.__readerToc = { parseTOC, splitParagraphs };
+  window.__readerToc = { parseTOC, splitParagraphs, cleanChapterParagraphs };
 }

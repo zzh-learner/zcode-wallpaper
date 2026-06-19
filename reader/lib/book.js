@@ -35,7 +35,7 @@
   async function openDrag(arg) {
     // arg: {filename, arrayBuffer} from FileReader / drop
     const { decodeText } = global.__readerCodec;
-    const { parseTOC, splitParagraphs } = global.__readerToc;
+    const { parseTOC, splitParagraphs, cleanChapterParagraphs } = global.__readerToc;
     const bytes = new Uint8Array(arg.arrayBuffer);
     const text = decodeText(bytes);
     const toc = parseTOC(text);
@@ -50,8 +50,8 @@
         if (n < 0 || n >= toc.chapters.length) return null;
         const c = toc.chapters[n];
         const chunk = text.slice(c.startOffset, c.endOffset);
-        let paras = splitParagraphs(chunk);
-        if (paras.length > 0 && paras[0] === c.title.trim()) paras.shift();
+        const raw = splitParagraphs(chunk);
+        const paras = cleanChapterParagraphs(raw, c.title);
         return { index: n, title: c.title, paragraphs: paras,
           prev: n > 0 ? n - 1 : null, next: n + 1 < toc.chapters.length ? n + 1 : null };
       },
