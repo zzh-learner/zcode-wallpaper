@@ -24,6 +24,15 @@ check("merge null wallpaper -> null field", merged.wallpaper === null);
 check("merge records probeErrors for nulls", Array.isArray(merged._meta.probeErrors) && merged._meta.probeErrors.length === 2);
 check("merge _meta.fetchedAt is number", typeof merged._meta.fetchedAt === "number");
 
+// === classifyTransparent: spec §10 状态机纯分类 ===
+// psResult = {found, layered, alpha, hwnd}, ambiguous = 多候选无法确定
+check("classify: layered alpha<255 -> enabled true", status.classifyTransparent({found:true,layered:true,alpha:199}, false).enabled === true);
+check("classify: layered alpha<255 -> opacityPct 78", status.classifyTransparent({found:true,layered:true,alpha:199}, false).opacityPct === 78);
+check("classify: layered alpha 255 -> enabled false", status.classifyTransparent({found:true,layered:true,alpha:255}, false).enabled === false);
+check("classify: not layered -> enabled false", status.classifyTransparent({found:true,layered:false,alpha:0}, false).enabled === false);
+check("classify: not found + ambiguous -> unknown", status.classifyTransparent({found:false}, true).enabled === "unknown");
+check("classify: not found + not ambiguous -> false", status.classifyTransparent({found:false}, false).enabled === false);
+
 // === snapshot() with tmp project root (no ZCode on 9222 in test env) ===
 const fs = require("fs"), os = require("os"), path = require("path");
 (async () => {
