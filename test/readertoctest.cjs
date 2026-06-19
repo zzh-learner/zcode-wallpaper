@@ -160,5 +160,116 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("cleanChapterParagraphs result has only the body paragraph", cleaned.length === 1);
 })();
 
+// === 前言识别（spec 2026-06-19-frontmatter-backmatter）===
+// 第一章之前的内容应成为前言章节，标题用原文标记词。
+(function(){
+  const text = "楔子\n天空中两道身影对视。\n这是楔子正文第二段。\n第三段内容。\n第四段内容。\n第一章 开始\n正文一。\n第二章 结束\n正文二。\n";
+  const r = parseTOC(text, "test.txt");
+  check("preface: 3 chapters (preface+2)", r.chapters.length === 3);
+  check("preface: first title is '楔子'", r.chapters[0].title === "楔子");
+  check("preface: startOffset 0", r.chapters[0].startOffset === 0);
+  check("preface: endOffset == ch1 startOffset", r.chapters[0].endOffset === r.chapters[1].startOffset);
+  check("preface: second is 第一章", /第一章/.test(r.chapters[1].title));
+})();
+// 前言无标记词 -> 回退 "前言"
+(function(){
+  const text = "《某书》\n作者：某人\n这是开篇介绍第一段。\n开篇第二段补充。\n开篇第三段说明。\n开篇第四段内容。\n第一章 开始\n正文。\n";
+  const r = parseTOC(text, "test.txt");
+  check("preface-fallback: title '前言'", r.chapters[0].title === "前言");
+  check("preface-fallback: 2 chapters", r.chapters.length === 2);
+})();
+// 前言过短（< 5 行且 < 200 字）不生成
+(function(){
+  const text = "短简介。\n第一章 开始\n正文。\n";
+  const r = parseTOC(text, "test.txt");
+  check("preface-short: NO preface generated", !/前言|短简介/.test(r.chapters[0].title));
+  check("preface-short: first is 第一章", /第一章/.test(r.chapters[0].title));
+})();
+
+// === 后记识别（spec §2）===
+// 最后一章正文里的"尾声"应切出独立后记章节
+(function(){
+  const text = "第一章 开始\n正文一。\n第二章 结束\n正文二正文二正文二。\n尾声\n这是作者的话。\n感言第二段。\n（全文完）\n";
+  const r = parseTOC(text, "test.txt");
+  const last = r.chapters[r.chapters.length - 1];
+  const secondLast = r.chapters[r.chapters.length - 2];
+  check("afterword: last title '尾声'", last.title === "尾声");
+  check("afterword: second-last is 第二章", /第二章/.test(secondLast.title));
+  check("afterword: last endOffset == text.length", last.endOffset === text.length);
+  check("afterword: secondLast endOffset == last startOffset", secondLast.endOffset === last.startOffset);
+})();
+// 完本声明类 (全文完) -> 标题"后记"
+(function(){
+  const text = "第一章 开始\n正文一正文一正文一。\n（全文完）\n作者感言。\n第二段感言。\n第三段。\n第四段。\n";
+  const r = parseTOC(text, "test.txt");
+  const last = r.chapters[r.chapters.length - 1];
+  check("afterword-declare: last title '后记'", last.title === "后记");
+})();
+// 守卫："全文完成XX任务"不误匹
+(function(){
+  const text = "第一章 开始\n他终于全文完成了任务。\n大家都全文完成了。\n这是正文第三段。\n第四段。\n第五段。\n";
+  const r = parseTOC(text, "test.txt");
+  const last = r.chapters[r.chapters.length - 1];
+  check("afterword-guard: no afterword split", /第一章/.test(last.title));
+  check("afterword-guard: endOffset == text.length (no split)", last.endOffset === text.length);
+})();
+// 边界情况A：无标记词不切分（回到明朝型）
+(function(){
+  const text = "第一章 开始\n正文一。\n作者感言直接续在这里没有标记词。\n第二段感言。\n第三段。\n第四段。\n";
+  const r = parseTOC(text, "test.txt");
+  const last = r.chapters[r.chapters.length - 1];
+  check("afterword-none(边界A): no split", /第一章/.test(last.title));
+  check("afterword-none(边界A): endOffset == text.length", last.endOffset === text.length);
+})();
+
+// === 6 本真实样本断言（spec 表；真机事实为准，教训19）===
+// novels/*.txt 是私有文件（gitignore），存在时跑、不存在跳过。锁定真机预期：
+//   回到明朝: pref=书籍介绍, aft=无（边界A）
+//   天擎:     pref=无,     aft=后记
+//   惟我独仙: pref=楔子,   aft=尾声
+//   斗破苍穹: pref=无,     aft=无（前言<5行不生成；大结局即正文结尾）
+//   盘龙:     pref=无,     aft=后记
+//   纨绔才子: pref=无,     aft=后记（前言3行<5不生成）
+(function(){
+  const fs = require("fs");
+  const path = require("path");
+  const { detectEncoding } = require("../lib/reader-codec.cjs");
+  const dir = path.join(__dirname, "..", "novels");
+  const cases = [
+    { file: "回到明朝当王爷.txt", pref: "书籍介绍", aft: null },
+    { file: "天擎.txt",           pref: null,       aft: "后记" },
+    { file: "惟我独仙.txt",       pref: "楔子",     aft: "尾声" },
+    { file: "斗破苍穹.txt",       pref: null,       aft: null },
+    { file: "盘龙.txt",           pref: null,       aft: "后记" },
+    { file: "纨绔才子.txt",       pref: null,       aft: "后记" },
+  ];
+  let ran = 0;
+  for (const c of cases) {
+    const full = path.join(dir, c.file);
+    if (!fs.existsSync(full)) continue;
+    ran++;
+    const bytes = fs.readFileSync(full);
+    const enc = detectEncoding(bytes);
+    let b = bytes; if (enc === "utf8" && b.length >= 3 && b[0] === 0xEF) b = b.slice(3);
+    const text = new TextDecoder(enc).decode(b);
+    const r = parseTOC(text, c.file);
+    const first = r.chapters[0].title;
+    const last = r.chapters[r.chapters.length - 1].title;
+    const isPref = first !== "全文" && !/第[一二两三四五六七八九十百千零0-9]+(章|节|回)/.test(first);
+    const isAft = last !== "全文" && !/第[一二两三四五六七八九十百千零0-9]+(章|节|回)/.test(last) && r.chapters.length > 1;
+    if (c.pref) {
+      check("real-" + c.file + ": preface title '" + c.pref + "'", isPref && first.slice(0, c.pref.length) === c.pref);
+    } else {
+      check("real-" + c.file + ": no preface", !isPref);
+    }
+    if (c.aft) {
+      check("real-" + c.file + ": afterword title '" + c.aft + "'", isAft && last === c.aft);
+    } else {
+      check("real-" + c.file + ": no afterword", !isAft);
+    }
+  }
+  if (ran === 0) console.log("(skip: novels/*.txt not present — real-book tests need private files)");
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
