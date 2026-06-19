@@ -16,8 +16,8 @@ if (!dir || !fs.existsSync(dir)) {
 let entries = [];
 try { entries = fs.readdirSync(dir).filter(n => /\.txt$/i.test(n)); } catch (e) {}
 console.log("Scanning " + entries.length + " .txt files in: " + dir + "\n");
-console.log("file | sizeMB | encoding | chaps | vols | suspect | note");
-console.log("-----|--------|----------|-------|------|---------|-----");
+console.log("file | sizeMB | encoding | chaps | vols | pref | aft | suspect | note");
+console.log("-----|--------|----------|-------|------|------|-----|---------|-----");
 
 const anomalies = [];
 for (const name of entries) {
@@ -40,6 +40,14 @@ for (const name of entries) {
   const toc = parseTOC(text, name);
   const nchap = toc.chapters.length;
   const nvol = toc.volumes.length;
+  // 前言：第一章标题不是"第X章/节/回"且不是"全文" -> 是前言/楔子类
+  const firstCh = toc.chapters[0];
+  const hasPreface = firstCh && firstCh.title !== "全文" && !/第[一二两三四五六七八九十百千零0-9]+(章|节|回)/.test(firstCh.title);
+  const prefLabel = hasPreface ? firstCh.title.slice(0, 8) : "-";
+  // 后记：最后一章标题不是"第X章/节/回"且不是"全文"（且不止1章）-> 尾声/后记类
+  const lastCh = toc.chapters[toc.chapters.length - 1];
+  const hasAfterword = lastCh && lastCh.title !== "全文" && !/第[一二两三四五六七八九十百千零0-9]+(章|节|回)/.test(lastCh.title) && toc.chapters.length > 1;
+  const aftLabel = hasAfterword ? lastCh.title.slice(0, 6) : "-";
   // anomaly heuristics
   if (nchap === 1 && toc.chapters[0].title === "全文") { note = "FALLBACK全文"; anomalies.push({name, note}); }
   else if (nchap > 0 && nchap < 20) { note = "low chaps"; anomalies.push({name, note, nchap}); }
@@ -50,6 +58,8 @@ for (const name of entries) {
     enc.padEnd(8) + " | " +
     String(nchap).padStart(5) + " | " +
     String(nvol).padStart(4) + " | " +
+    prefLabel.padEnd(8) + " | " +
+    aftLabel.padEnd(6) + " | " +
     (suspect ? "  yes" : "   no") + " | " +
     note
   );
