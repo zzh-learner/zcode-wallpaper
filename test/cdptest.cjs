@@ -29,5 +29,31 @@ check("excludes non-page (webview)", !filtered.some(t => t.type === "webview"));
 check("excludes target without webSocketDebuggerUrl", !filtered.some(t => !t.webSocketDebuggerUrl));
 check("exactly 1 target remains (the ZCode main page)", filtered.length === 1);
 
-console.log("\n" + pass + " passed, " + fail + " failed");
-process.exit(fail === 0 ? 0 : 1);
+// === listTargets via mock /json server ===
+const http = require("http");
+(async () => {
+  // mock CDP /json returning the same targets
+  const mock = http.createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(targets));
+  });
+  await new Promise(r => mock.listen(0, "127.0.0.1", r));
+  const mport = mock.address().port;
+  // point cdp at the mock via env, reload module fresh
+  process.env.ZCODE_DEBUG_PORT = String(mport);
+  delete require.cache[require.resolve("../lib/cdp.cjs")];
+  const cdpMocked = require("../lib/cdp.cjs");
+  try {
+    const pages = await cdpMocked.listTargets();
+    check("listTargets returns filtered pages (1)", pages.length === 1);
+    check("listTargets page is the ZCode main", pages[0].url === "file:///C:/ZCode/index.html");
+  } catch (e) {
+    check("listTargets runs without throwing", false);
+    console.error(e);
+  } finally {
+    mock.close();
+    delete process.env.ZCODE_DEBUG_PORT;
+  }
+  console.log("\n" + pass + " passed, " + fail + " failed");
+  process.exit(fail === 0 ? 0 : 1);
+})();
