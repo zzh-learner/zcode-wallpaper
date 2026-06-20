@@ -71,9 +71,10 @@ function httpGet(url) {
     const noSlash = await httpGet(base + "/reader");
     check("/reader redirects to /reader/", noSlash.status === 302 && (noSlash.headers.location || "") === "/reader/");
 
-    // / redirects to /reader/
+    // / redirects to /control/ (control-center is now the home; merged server.
+    // Reader users arrive at /reader/ via reader-server.bat's clipboard URL.)
     const root = await httpGet(base + "/");
-    check("/ redirects to /reader/", root.status === 302 && (root.headers.location || "") === "/reader/");
+    check("/ redirects to /control/ (merged home)", root.status === 302 && (root.headers.location || "") === "/control/");
   } finally {
     server.close();
     try { fs.rmSync(tmpNovels, { recursive: true }); } catch (e) {}

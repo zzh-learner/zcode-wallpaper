@@ -1,0 +1,27 @@
+/* A1: transparent background so ZCode wallpaper shows through (spec §2/§4 B1).
+   The page itself paints transparent; wallpaper comes from ZCode body below. */
+html, body { margin: 0; height: 100%; background: transparent !important; color: #fff;
+  font-family: "Microsoft YaHei", system-ui, sans-serif; font-size: 13px; }
+.panel { background: rgba(20, 20, 24, 0.55); border-radius: 8px; padding: 10px 12px; margin: 8px;
+  backdrop-filter: blur(3px); }
+h3 { margin: 0 0 6px 0; font-size: 14px; }
+.st { padding: 3px 0; }
+button { background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px; padding: 4px 10px; cursor: pointer; margin: 2px; }
+button:hover { background: rgba(255, 255, 255, 0.22); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+input { background: rgba(0, 0, 0, 0.3); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px; width: 50px; }
+.ok { color: #66bb6a; } .warn { color: #ffb74d; } .muted { color: #aaa; }
+#shelf-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex; align-items: center; justify-content: space-between; }
+#shelf-list .book.stale { color: #ff8a80; }
+#shelf-list .book-open { cursor: pointer; flex: 1; }
+#shelf-list .book.addable { cursor: default; }
+#shelf-list .book.addable span { flex: 1; color: #ccc; }
+#shelf-list .book-del, #shelf-list .book-add { padding: 0 6px; margin: 0; font-size: 12px; line-height: 18px; }
+#shelf-list .book-del:hover { background: rgba(255, 100, 100, 0.3); }
+#shelf-list .book-add:hover { background: rgba(100, 200, 100, 0.3); }
+.shelf-section-title { font-size: 12px; color: #ffb74d; margin: 10px 0 4px 0; font-weight: bold;
+  border-bottom: 1px solid rgba(255,183,77,0.3); padding-bottom: 2px; }
+.shelf-section-title:first-child { margin-top: 0; }

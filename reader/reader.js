@@ -99,6 +99,37 @@
     box.appendChild(d);
   }
 
+  // Scroll #sidebar so the current TOC chapter is centered.
+  // The scroll container is #sidebar (overflow-y:auto). Probed findings that
+  // shaped this:
+  //   - #toc-list is overflow:visible, scrollHeight==clientHeight -> can't scroll
+  //     there; scrollIntoView on .chap is a no-op.
+  //   - .chap.offsetParent is BODY (not #sidebar), so walking the offsetParent
+  //     chain never reaches #sidebar -> offsetTop-sum is wrong.
+  //   - When collapsed, #sidebar.scrollTop holds a STALE value (e.g. 2203 from a
+  //     prior view), and scrollHeight differs from the expanded value. So on
+  //     expand we MUST re-set scrollTop, not leave it.
+  // Reliable approach: use getBoundingClientRect deltas (viewport-relative, no
+  // offsetParent dependency). target scrollTop = current scrollTop + (cur's offset
+  // from sidebar's top edge) - (half the sidebar height) + half cur height.
+  function scrollTocToCurrent(sb, delay) {
+    sb = sb || $("sidebar");
+    if (!sb) return;
+    // delay lets the sidebar width transition (on expand) finish so
+    // getBoundingClientRect reflects the visible layout, not the 0-width state.
+    requestAnimationFrame(function () {
+      setTimeout(function () {
+        var cur = document.querySelector("#toc-list .chap.current");
+        if (!cur) return;
+        var cR = cur.getBoundingClientRect();
+        var sR = sb.getBoundingClientRect();
+        var offsetFromSidebarTop = cR.top - sR.top;
+        var target = sb.scrollTop + offsetFromSidebarTop - (sb.clientHeight - cR.height) / 2;
+        sb.scrollTop = Math.max(0, target);
+      }, delay || 0);
+    });
+  }
+
   async function showChapter(n, restoreRatio) {
     if (!currentBook) return;
     var ch = await currentBook.getChapter(n);
@@ -113,9 +144,9 @@
     [].forEach.call(document.querySelectorAll("#toc-list .chap"), function (el) {
       el.classList.toggle("current", parseInt(el.dataset.idx, 10) === n);
     });
-    // scroll current into view in toc
-    var cur = document.querySelector("#toc-list .chap.current");
-    if (cur) cur.scrollIntoView({ block: "nearest" });
+    // scroll current chapter into view in sidebar (scrollTocToCurrent handles
+    // the real scroll container; the old scrollIntoView was a no-op — probed).
+    scrollTocToCurrent();
     // restore scroll ratio
     var reader = $("reader");
     reader.scrollTop = restoreRatio ? restoreRatio * (reader.scrollHeight - reader.clientHeight) : 0;
@@ -125,6 +156,17 @@
     // nav buttons
     $("prev-chap").disabled = (ch.prev === null);
     $("next-chap").disabled = (ch.next === null);
+    // update shelf entry + re-render sidebar on chapter change so the "读到: 第X章"
+    // label stays current (fix: sidebar only rendered once at init -> stale chapter
+    // until manual refresh). Save preserves the current scroll ratio (don't clobber
+    // a just-restored position with 0).
+    var r2 = $("reader");
+    var ratio2 = r2.scrollHeight > r2.clientHeight
+      ? r2.scrollTop / (r2.scrollHeight - r2.clientHeight) : 0;
+    currentBook.save(n, ratio2);
+    shelf.addToShelf({ bookId: currentBook.id, filename: $("book-name").textContent,
+      lastChapterTitle: ch.title });
+    renderShelf();
   }
 
   // ---- scroll -> save progress (debounced) ----
@@ -176,7 +218,15 @@
   // ---- wiring ----
   function init() {
     try {
-      $("btn-shelf").onclick = function () { $("sidebar").classList.toggle("collapsed"); };
+      $("btn-shelf").onclick = function () {
+        var sb = $("sidebar");
+        sb.classList.toggle("collapsed");
+        // When EXPANDING the sidebar, scroll the current chapter into view.
+        // Pass a delay so the width transition (0 -> 220px) settles before we
+        // measure getBoundingClientRect; measuring too early uses the collapsed
+        // layout and lands on the wrong chapter.
+        if (!sb.classList.contains("collapsed")) scrollTocToCurrent(sb, 150);
+      };
       $("font-inc").onclick = function () { setFont(1); };
       $("font-dec").onclick = function () { setFont(-1); };
       $("theme-toggle").onclick = function () {
@@ -200,6 +250,21 @@
 
       setupDrag();
       renderShelf();
+
+      // Deep-link: if URL has ?book=<id>, open that book directly (control center
+      // shelf click -> /reader/?book=<id>). Needs http mode (fetch /api/books
+      // to resolve filename). book-router.js is loaded as window.__readerBookRouter.
+      if (window.__readerBookRouter && bookApi.isHttpMode()) {
+        var bid = window.__readerBookRouter.parseBookParam(location.search);
+        if (bid) {
+          fetch("/api/books").then(function (r) { return r.json(); }).then(function (books) {
+            var b = null;
+            for (var i = 0; i < books.length; i++) { if (books[i].id === bid) { b = books[i]; break; } }
+            if (b) openBook(b.id, b.filename);
+            else showErr("?book=" + bid + " 没找到对应的书");
+          }).catch(function () { /* ignore; shelf still rendered */ });
+        }
+      }
     } catch (e) { showErr("初始化失败: " + e.message); }
   }
 

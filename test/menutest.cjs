@@ -22,9 +22,9 @@ check("menu has banner", out.indexOf("ZCode 壁纸工具箱") !== -1);
 check("menu has prompt line", out.indexOf("请输入选项编号:") !== -1);
 check("menu has exit option 0", out.indexOf("  0  退出") !== -1);
 
-// --- Exactly 12 scenarios in order ---
-check("SCENARIOS has 12 entries", SCENARIOS.length === 12);
-check("scenario keys are 1..12", SCENARIOS.map((s) => s.key).join("") === "123456789101112");
+// --- Exactly 13 scenarios in order ---
+check("SCENARIOS has 13 entries", SCENARIOS.length === 13);
+check("scenario keys are 1..13", SCENARIOS.map((s) => s.key).join("") === "12345678910111213");
 
 // --- Each scenario present in output with title, desc, calls ---
 const requiredCalls = [
@@ -40,6 +40,7 @@ const requiredCalls = [
   "transparent",
   "reader-server",
   "reader-help",
+  "control-center",
 ];
 SCENARIOS.forEach((s, i) => {
   check("scenario " + s.key + " title in output", out.indexOf(s.title) !== -1);
@@ -51,7 +52,7 @@ SCENARIOS.forEach((s, i) => {
 });
 
 // --- Call-chain coverage: every underlying script appears at least once ---
-["setup", "resize", "start-zcode", "inject-only", "remove-wallpaper", "start-transparent", "transparent", "reader-server", "reader-help"].forEach((name) => {
+["setup", "resize", "start-zcode", "inject-only", "remove-wallpaper", "start-transparent", "transparent", "reader-server", "reader-help", "control-center"].forEach((name) => {
   check("calls mention " + name, out.indexOf(name) !== -1);
 });
 

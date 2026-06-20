@@ -27,7 +27,10 @@
 param(
   [string]$ProcessName = "ZCode",
   [int]   $Opacity      = 78,    # 0-100，默认 78 (偏不透明保可读)，对齐旧 InitialAlpha=200
-  [int]   $InitialAlpha = -1     # 兼容旧用法 (0-255)；设了就以它为准，忽略 -Opacity
+  [int]   $InitialAlpha = -1,    # 兼容旧用法 (0-255)；设了就以它为准，忽略 -Opacity
+  [switch]$Query,                # 只读查询模式 (spec §4 A3 改动2)：查当前 alpha，绝不 Set
+  [long]  $Hwnd         = 0,     # -Query 时直接按 hwnd 查 (0=走窗口枚举选面积最大)
+  [switch]$Json                 # 机器可读输出 (查询/设置都支持，spec §4 A3 改动3)
 )
 
 # Win32 P/Invoke。常量命名清楚，不在 C# 里裸写 magic number。
@@ -38,6 +41,7 @@ public class Win32 {
   [DllImport("user32.dll")] public static extern int  GetWindowLong(IntPtr h, int nIndex);
   [DllImport("user32.dll")] public static extern int  SetWindowLong(IntPtr h, int nIndex, int dwNewLong);
   [DllImport("user32.dll")] public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+  [DllImport("user32.dll")] public static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint crKey, out byte bAlpha, out uint dwFlags);
 }
 "@
 Add-Type -TypeDefinition $win32Code -Language CSharp
@@ -57,17 +61,7 @@ if ($InitialAlpha -ge 0) {
 }
 Write-Host "[transparent] 目标透明度: Opacity=$Opacity% -> alpha=$alpha/255"
 
-# ---- 1) 找目标进程的 PID 集合 ----
-$procs = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
-if (-not $procs -or @($procs).Count -eq 0) {
-  Write-Host "[transparent] 没找到进程 '$ProcessName'。" -ForegroundColor Yellow
-  Write-Host "[transparent] 用 Get-Process 看真实进程名 (Electron 应用可能叫别的)，"
-  Write-Host "[transparent] 然后: powershell -File transparent.ps1 -ProcessName <真实名>"
-  exit 1
-}
-$pidSet = @($procs).Id
-
-# ---- 2) 枚举顶层窗口，过滤候选 ----
+# ---- WinEnum (窗口枚举) 提前 Add-Type，供下方 -Query 分支和 set 流程共用 ----
 # EnumWindows + IsWindowVisible 拿可见顶层窗口，GetWindow(GW_OWNER) 过掉子窗口。
 $enumCode = @"
 using System;
@@ -107,6 +101,71 @@ public class WinEnum {
 }
 "@
 Add-Type -TypeDefinition $enumCode -Language CSharp
+
+# ---- 0) -Query 模式：只读查询 alpha，绝不 Set (spec §4 A3 改动2) ----
+if ($Query) {
+  function Get-Alpha-Info([IntPtr]$h) {
+    # 返回 @{ layered=bool; alpha=int }。GetLayeredWindowAttributes 拿不到(layered 未设)时 layered=false。
+    $key = [uint32]0; $a = [byte]0; $flags = [uint32]0
+    $ok = [Win32]::GetLayeredWindowAttributes($h, [ref]$key, [ref]$a, [ref]$flags)
+    # LWA_ALPHA=0x2：flags 含它说明 alpha 生效
+    $layered = (($flags -band $LWA_ALPHA) -ne 0)
+    return @{ layered = $layered; alpha = [int]$a }
+  }
+  if ($Hwnd -gt 0) {
+    # 直接按 hwnd 查 (server 记的 hwnd，快且回避多候选)
+    $h = [IntPtr]$Hwnd
+    $r = Get-Alpha-Info $h
+    $obj = @{ hwnd = $Hwnd; alpha = $(if ($r.layered) { $r.alpha } else { $null });
+              opacityPct = $(if ($r.layered) { [Math]::Round($r.alpha / 255 * 100) } else { $null });
+              layered = $r.layered }
+    if ($Json) { Write-Output ($obj | ConvertTo-Json -Compress) }
+    else { Write-Host ("hwnd=" + $Hwnd + " layered=" + $r.layered + " alpha=" + $r.alpha) }
+    exit 0
+  }
+  # 没给 hwnd：枚举进程窗口，多候选自动选面积最大 (不 read-host，spec §10 状态机"否"分支)
+  $qprocs = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
+  if (-not $qprocs -or @($qprocs).Count -eq 0) {
+    # 进程没开 -> 确定没透明
+    if ($Json) { Write-Output '{"hwnd":null,"alpha":null,"layered":false}' }
+    else { Write-Host "[transparent] 没找到进程 '$ProcessName'。" }
+    exit 2
+  }
+  $qpidSet = @($qprocs).Id
+  $qpidPtr = @($qpidSet | ForEach-Object { [IntPtr]$_ })
+  $qraw = [WinEnum]::Dump($qpidPtr)
+  $qwindows = foreach ($line in $qraw) {
+    $p = $line -split '\|'; $size = $p[4] -split 'x'
+    [pscustomobject]@{ hwnd=[long]$p[0]; width=[int]$size[0]; height=[int]$size[1]; toplevel=($p[5] -eq "1") }
+  }
+  $qcand = @($qwindows | Where-Object { $_.toplevel -and $_.width -gt 0 -and $_.height -gt 0 } |
+             Sort-Object { $_.width * $_.height } -Descending)
+  if ($qcand.Count -eq 0) {
+    # 进程在跑但无可见顶层窗口 -> 无法确定 (unknown 场景之一)
+    if ($Json) { Write-Output '{"hwnd":null,"alpha":null,"layered":false}' }
+    else { Write-Host "[transparent] 进程在跑但无可见顶层窗口。" }
+    exit 2
+  }
+  $qchosen = $qcand[0]   # 面积最大，自动选，不 read-host
+  $qh = [IntPtr]$qchosen.hwnd
+  $qr = Get-Alpha-Info $qh
+  $obj = @{ hwnd = [long]$qchosen.hwnd; alpha = $(if ($qr.layered) { $qr.alpha } else { $null });
+            opacityPct = $(if ($qr.layered) { [Math]::Round($qr.alpha / 255 * 100) } else { $null });
+            layered = $qr.layered }
+  if ($Json) { Write-Output ($obj | ConvertTo-Json -Compress) }
+  else { Write-Host ("hwnd=" + $qchosen.hwnd + " layered=" + $qr.layered + " alpha=" + $qr.alpha) }
+  exit 0
+}
+
+# ---- 1) 找目标进程的 PID 集合 (set 流程) ----
+$procs = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue
+if (-not $procs -or @($procs).Count -eq 0) {
+  Write-Host "[transparent] 没找到进程 '$ProcessName'。" -ForegroundColor Yellow
+  Write-Host "[transparent] 用 Get-Process 看真实进程名 (Electron 应用可能叫别的)，"
+  Write-Host "[transparent] 然后: powershell -File transparent.ps1 -ProcessName <真实名>"
+  exit 1
+}
+$pidSet = @($procs).Id
 
 $pidPtr = @($pidSet | ForEach-Object { [IntPtr]$_ })
 $raw = [WinEnum]::Dump($pidPtr)
@@ -173,6 +232,12 @@ if ($alpha -ge 255) {
   Write-Host "[transparent] 已恢复完全不透明 (Opacity=100%)。"
 } else {
   Write-Host "[transparent] 已设透明 alpha=$alpha/255 (Opacity=$Opacity%)。"
+}
+# -Json：额外打印一行机器可读的 {event:set,hwnd,alpha,opacityPct}，让 control
+# server 能建立"setTransparent -> 后续 -Query -Hwnd"链路 (spec §4 A3 改动3)。
+if ($Json) {
+  $setObj = @{ event = "set"; hwnd = [long]$chosen.hwnd; alpha = $alpha; opacityPct = $Opacity }
+  Write-Output ($setObj | ConvertTo-Json -Compress)
 }
 Write-Host "[transparent] 完成。要改透明度重跑此脚本，要恢复用 -Opacity 100。"
 exit 0
