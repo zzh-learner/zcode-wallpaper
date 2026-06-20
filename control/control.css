@@ -1,9 +1,16 @@
 /* A1: transparent background so ZCode wallpaper shows through (spec §2/§4 B1).
    The page itself paints transparent; wallpaper comes from ZCode body below. */
 html, body { margin: 0; height: 100%; background: transparent !important; color: #fff;
-  font-family: "Microsoft YaHei", system-ui, sans-serif; font-size: 13px; }
-.panel { background: rgba(20, 20, 24, 0.55); border-radius: 8px; padding: 10px 12px; margin: 8px;
-  backdrop-filter: blur(3px); }
+  font-family: "Microsoft YaHei", system-ui, sans-serif; font-size: 13px;
+  /* text-shadow lets white text stay readable over bright wallpaper patches
+     when panels are very transparent (教训2: CSS can't fix readability on its
+     own, but a dark outline helps). */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9); }
+/* Panels near-transparent so the wallpaper shows through broadly; backdrop blur
+   + text-shadow keep content legible. Tune the 0.25 alpha up if text is hard to
+   read on bright wallpapers, down if wallpaper is too obscured. */
+.panel { background: rgba(20, 20, 24, 0.25); border-radius: 8px; padding: 10px 12px; margin: 8px;
+  backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.12); }
 h3 { margin: 0 0 6px 0; font-size: 14px; }
 .st { padding: 3px 0; }
 button { background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
