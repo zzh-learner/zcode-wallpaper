@@ -697,7 +697,11 @@ action（spawn launch-zcode.bat），但**那是错的**：launch-zcode.bat Step
 
 ### start.bat 一站式入口
 
-双击 `start.bat`（根目录）：Node 预检 → launch-zcode.bat（带 9222 重启 ZCode）→ 起 control-server（写剪贴板）。
+双击 `start.vbs`（根目录，无 cmd 黑窗；它隐藏启动 `start.bat`）：停旧 control-server →
+launch-zcode.bat（带 9222 重启 ZCode）→ 后台起 control-server（PowerShell `-WindowStyle Hidden`，无窗，
+真机验 MainWindowHandle=0 + API 可达；写剪贴板）。
+**重跑 = 自动清旧**：start.bat Step 0 按命令行匹配 kill 旧 control-server node（精确，不误杀别的 node），
+所以重跑 start.vbs 即可清理 + 重启，不用任务管理器。
 **不自动打开浏览器面板**：试过用 CDP 驱动地址栏，但 ZCode 在 git working tree 有未提交修改时默认开审查面板
 （不是浏览器面板），自动打开太不可靠，已移除。需手动开浏览器面板 + 粘 `/control/`。
 
