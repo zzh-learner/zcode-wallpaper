@@ -100,25 +100,33 @@
   }
 
   // Scroll #sidebar so the current TOC chapter is centered.
-  // The scroll container is #sidebar (overflow-y:auto), NOT #toc-list (which is
-  // overflow:visible with scrollHeight==clientHeight — probed: scrollIntoView on
-  // .chap is a no-op there). So set #sidebar.scrollTop directly via offsetTop
-  // measured relative to #sidebar. sb is the sidebar element (optional; defaults
-  // to #sidebar). Uses a rAF+delay so layout (width transition on expand) is
-  // applied before measuring.
-  function scrollTocToCurrent(sb) {
+  // The scroll container is #sidebar (overflow-y:auto). Probed findings that
+  // shaped this:
+  //   - #toc-list is overflow:visible, scrollHeight==clientHeight -> can't scroll
+  //     there; scrollIntoView on .chap is a no-op.
+  //   - .chap.offsetParent is BODY (not #sidebar), so walking the offsetParent
+  //     chain never reaches #sidebar -> offsetTop-sum is wrong.
+  //   - When collapsed, #sidebar.scrollTop holds a STALE value (e.g. 2203 from a
+  //     prior view), and scrollHeight differs from the expanded value. So on
+  //     expand we MUST re-set scrollTop, not leave it.
+  // Reliable approach: use getBoundingClientRect deltas (viewport-relative, no
+  // offsetParent dependency). target scrollTop = current scrollTop + (cur's offset
+  // from sidebar's top edge) - (half the sidebar height) + half cur height.
+  function scrollTocToCurrent(sb, delay) {
     sb = sb || $("sidebar");
     if (!sb) return;
+    // delay lets the sidebar width transition (on expand) finish so
+    // getBoundingClientRect reflects the visible layout, not the 0-width state.
     requestAnimationFrame(function () {
       setTimeout(function () {
         var cur = document.querySelector("#toc-list .chap.current");
         if (!cur) return;
-        // offsetTop chain up to #sidebar
-        var off = 0, node = cur;
-        while (node && node !== sb) { off += node.offsetTop; node = node.offsetParent; }
-        var target = off - sb.clientHeight / 2 + cur.clientHeight / 2;
+        var cR = cur.getBoundingClientRect();
+        var sR = sb.getBoundingClientRect();
+        var offsetFromSidebarTop = cR.top - sR.top;
+        var target = sb.scrollTop + offsetFromSidebarTop - (sb.clientHeight - cR.height) / 2;
         sb.scrollTop = Math.max(0, target);
-      }, 0);
+      }, delay || 0);
     });
   }
 
@@ -214,7 +222,10 @@
         var sb = $("sidebar");
         sb.classList.toggle("collapsed");
         // When EXPANDING the sidebar, scroll the current chapter into view.
-        scrollTocToCurrent(sb);
+        // Pass a delay so the width transition (0 -> 220px) settles before we
+        // measure getBoundingClientRect; measuring too early uses the collapsed
+        // layout and lands on the wrong chapter.
+        if (!sb.classList.contains("collapsed")) scrollTocToCurrent(sb, 150);
       };
       $("font-inc").onclick = function () { setFont(1); };
       $("font-dec").onclick = function () { setFont(-1); };
