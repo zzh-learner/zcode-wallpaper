@@ -15,6 +15,14 @@
       <button data-action="setTransparent">设透明</button></label>
     <button data-action="resize">重新缩图</button>
     <button data-action="setup">重装依赖</button>
+    <fieldset class="rotate-section">
+      <legend>壁纸轮播</legend>
+      <label><input type="radio" name="rotate-mode" value="image" checked> 图片</label>
+      <label><input type="radio" name="rotate-mode" value="video"> 视频</label>
+      <label>间隔 <input id="rotate-interval" type="number" min="1" value="5"> 分钟</label>
+      <button data-action="startRotate">开始轮播</button>
+      <button data-action="stopRotate">停止轮播</button>
+    </fieldset>
     <button id="open-reader">打开阅读器</button>
     <span id="job-msg" class="muted"></span>
   </div>
