@@ -1,5 +1,5 @@
 # Ensure a .bat file has CRLF line endings (AGENTS.md: LF .bat files break cmd).
-$paths = @("$PSScriptRoot\..\bin\control-center.bat", "$PSScriptRoot\..\wallpaper.bat")
+$paths = @("$PSScriptRoot\..\bin\control-center.bat", "$PSScriptRoot\..\wallpaper.bat", "$PSScriptRoot\..\start.bat")
 foreach ($p in $paths) {
   $bytes = [System.IO.File]::ReadAllBytes($p)
   $hasCrlf = $false
