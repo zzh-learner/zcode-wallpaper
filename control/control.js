@@ -39,10 +39,20 @@
   document.getElementById("actions").addEventListener("click", function (e) {
     var action = e.target.getAttribute && e.target.getAttribute("data-action");
     if (!action) return;
-    var params = action === "setTransparent"
-      ? { opacityPct: parseInt(document.getElementById("opacity").value, 10) }
-      : {};
-    dispatchAction(action, params).then(function (res) {
+    var params, finalAction = action;
+    if (action === "setTransparent") {
+      params = { opacityPct: parseInt(document.getElementById("opacity").value, 10) };
+    } else if (action === "startRotate") {
+      var modeEl = document.querySelector('input[name="rotate-mode"]:checked');
+      var mode = modeEl ? modeEl.value : "image";
+      var min = parseInt(document.getElementById("rotate-interval").value, 10);
+      if (isNaN(min) || min < 1) min = 5;
+      params = { intervalMs: min * 60000 };
+      finalAction = (mode === "video") ? "startRotateVideo" : "startRotateImage";
+    } else {
+      params = {};
+    }
+    dispatchAction(finalAction, params).then(function (res) {
       if (res.status === 409) setJobMsg("忙，请等当前动作完成");
       else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""));
       else { setJobMsg("已提交 (" + res.json.jobId + ")"); setTimeout(poll, 500); }

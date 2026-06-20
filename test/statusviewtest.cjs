@@ -33,5 +33,50 @@ const html3 = sv.renderStatus({
 check("render transparent enabled shows 78%", html3.indexOf("78") !== -1);
 check("render wallpaper none shows 未注入", html3.indexOf("未注入") !== -1);
 
+// === rotate row (spec §7.3) ===
+const rotRunning = sv.renderStatus({
+  zcode: { running: true }, wallpaper: { mode: "none" }, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  rotate: { running: true, mode: "image", intervalMs: 300000, lastFile: "Chapter4.jpg", nextSwitchAt: 1718900000000 },
+  _meta: { probeErrors: [] },
+});
+check("render rotate running shows 轮播", rotRunning.indexOf("轮播") !== -1);
+check("render rotate running shows interval 5min", rotRunning.indexOf("5min") !== -1);
+check("render rotate running shows mode 图片", rotRunning.indexOf("图片") !== -1);
+check("render rotate running shows lastFile", rotRunning.indexOf("Chapter4.jpg") !== -1);
+
+const rotVideo = sv.renderStatus({
+  zcode: null, wallpaper: null, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  rotate: { running: true, mode: "video", intervalMs: 600000, lastFile: "v.mp4", nextSwitchAt: 0 },
+  _meta: { probeErrors: [] },
+});
+check("render rotate video mode shows 视频", rotVideo.indexOf("视频") !== -1);
+check("render rotate video shows 10min", rotVideo.indexOf("10min") !== -1);
+
+const rotOff = sv.renderStatus({
+  zcode: null, wallpaper: null, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  rotate: { running: false },
+  _meta: { probeErrors: [] },
+});
+check("render rotate off shows 未轮播", rotOff.indexOf("未轮播") !== -1);
+
+const rotStale = sv.renderStatus({
+  zcode: null, wallpaper: null, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  rotate: { running: false, stale: true },
+  _meta: { probeErrors: [] },
+});
+check("render rotate stale shows 进程退出", rotStale.indexOf("进程退出") !== -1);
+
+const rotNull = sv.renderStatus({
+  zcode: null, wallpaper: null, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  rotate: null,
+  _meta: { probeErrors: [{ item: "rotate" }] },
+});
+check("render rotate null shows placeholder", rotNull.indexOf("—") !== -1);
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

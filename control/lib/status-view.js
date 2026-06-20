@@ -26,11 +26,20 @@ function renderStatus(st) {
     ? '图 ' + esc(res.images) + ' | 缩图 ' + esc(res.thumbs) + ' | 视频 ' + esc(res.videos) +
       ' | 小说 ' + esc(res.novels) + ' | 依赖 ' + (res.deps && res.deps.sharp ? '✓' : '✗')
     : '';
+  var rot = st.rotate;
+  var rotHtml;
+  if (!rot) rotHtml = '<span class="muted">—</span>';
+  else if (!rot.running) rotHtml = rot.stale ? '<span class="warn">轮播已停（进程退出）</span>' : '<span class="muted">未轮播</span>';
+  else {
+    var nextStr = rot.nextSwitchAt ? new Date(rot.nextSwitchAt).toLocaleTimeString() : '—';
+    rotHtml = esc(rot.mode === 'video' ? '视频' : '图片') + ' 轮播 | 每 ' + esc(Math.round(rot.intervalMs / 60000)) + 'min | 下次 ' + esc(nextStr) + ' | 当前 ' + esc(rot.lastFile || '—');
+  }
   return '<div class="st">' + zHtml + '</div>' +
     '<div class="st">' + wHtml + '</div>' +
     '<div class="st">' + tHtml + '</div>' +
     '<div class="st">' + rHtml + '</div>' +
-    '<div class="st">' + resHtml + '</div>';
+    '<div class="st">' + resHtml + '</div>' +
+    '<div class="st">' + rotHtml + '</div>';
 }
 if (typeof module !== "undefined" && module.exports) module.exports = { renderStatus: renderStatus };
 if (typeof window !== "undefined") window.__ccStatusView = { renderStatus: renderStatus };
