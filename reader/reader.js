@@ -125,6 +125,17 @@
     // nav buttons
     $("prev-chap").disabled = (ch.prev === null);
     $("next-chap").disabled = (ch.next === null);
+    // update shelf entry + re-render sidebar on chapter change so the "读到: 第X章"
+    // label stays current (fix: sidebar only rendered once at init -> stale chapter
+    // until manual refresh). Save preserves the current scroll ratio (don't clobber
+    // a just-restored position with 0).
+    var r2 = $("reader");
+    var ratio2 = r2.scrollHeight > r2.clientHeight
+      ? r2.scrollTop / (r2.scrollHeight - r2.clientHeight) : 0;
+    currentBook.save(n, ratio2);
+    shelf.addToShelf({ bookId: currentBook.id, filename: $("book-name").textContent,
+      lastChapterTitle: ch.title });
+    renderShelf();
   }
 
   // ---- scroll -> save progress (debounced) ----
