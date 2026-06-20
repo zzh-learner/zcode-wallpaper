@@ -66,5 +66,17 @@ check("readState: null path -> { running: false }", rotate.readState(null).runni
 // cleanup
 try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
 
+// === buildImageCss (spec §4.3: wallpaper.css + background-image rule) ===
+var baseCss = "/* base */\nhtml, body { background: transparent; }";
+var url = "file:///C:/path/with%20space/Chapter4_2_8K_34.jpg";
+var built = rotate.buildImageCss(baseCss, url);
+check("buildImageCss: contains base css", built.indexOf("background: transparent") !== -1);
+check("buildImageCss: contains background-image rule", built.indexOf("background-image") !== -1);
+check("buildImageCss: contains the file url", built.indexOf(url) !== -1);
+check("buildImageCss: rule marked !important", built.indexOf("!important") !== -1);
+// empty/missing url -> no background-image line (rotate should guard, but be defensive)
+var built2 = rotate.buildImageCss(baseCss, "");
+check("buildImageCss: empty url -> still has base, no background-image", built2.indexOf("background: transparent") !== -1 && built2.indexOf("background-image") === -1);
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
