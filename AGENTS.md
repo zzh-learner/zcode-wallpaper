@@ -714,10 +714,78 @@ launch-zcode.bat（带 9222 重启 ZCode）→ 后台起 control-server（PowerS
 
 ---
 
+## 壁纸轮播（定时随机切换）
+
+第六种能力。和前五种不同：它不改 ZCode 某一面，而是**驱动现有的注入子系统定时重跑**。
+`lib/rotate.cjs` 是个常驻看门狗，每隔 N 分钟 spawn 一次 `inject.cjs` 换图/换视频。
+**rotate 自己不碰 CDP、不碰注入逻辑**——完全复用 inject 的 env var 旁路（`ZCODE_WP_CSS`/
+`ZCODE_WP_VIDEO`），符合"控制中心/触发器不重写动作逻辑"（教训 1）。
+
+### 为什么 rotate spawn inject 而非自己持有 CDP
+
+复用 = 零代码重复。rotate 自己持有 CDP 长连接能省每次几百 ms 的进程启动开销，但要把
+connect/retry/buildExpression/buildVideoExpression 抄一份，还要处理"页面导航后 target 变了"。
+两份拷贝 = 两份能各自再坏一次的机会（教训 1 二次事故）。不值。间隔是分钟级，开销可忽略。
+
+### 状态用文件 + pid 探活（非 IPC）
+
+rotate 写 `<root>/.rotate.json`（gitignore，运行时产物），status 读它。
+"control-server 重启丢 child handle 但 .rotate.json 残留 running:true"靠
+`process.kill(pid, 0)` 探活弥补——pid 死了 status 返回 `{running:false, stale:true}`。
+单向数据流（rotate 写、status 读），比 IPC/socket 简单（不用管连接生命周期）。
+
+### 互斥 + 单一 kill 逻辑
+
+图轮播和视频轮播互斥（body 同时只能一个背景）。control-server 的 `stopRotateNow()` 是
+**唯一一份** kill 逻辑：前端"停止"按钮和 `startRotate*` 的"先停旧"互斥守卫都调它。
+server 重启丢 handle 时，`stopRotateNow()` 走 pid kill 兜底（spec §8 边界）。
+
+### Windows kill 不触发子进程 SIGTERM（2026-06 踩的坑，教训补丁）
+
+**这是真机端到端验证才发现的 bug，单测完全抓不到**（教训 13 的直接实例）。
+
+`stopRotateNow()` kill rotate 子进程后，**父进程（control-server）必须自己写
+`running:false` 到 `.rotate.json`**，不能依赖子进程的 SIGTERM 处理。原因：Windows 上
+`child.kill()` 直接 `TerminateProcess`，**不投递 SIGTERM/SIGINT 信号**——子进程里注册的
+`process.on("SIGTERM", shutdown)` 永远不触发，子进程的 `shutdown()`（本会写 running:false
++ 清理临时 css）完全不跑。`.rotate.json` 残留 `running:true` → status 读到 `stale:true`
+→ 用户点"停止"后状态还显示"轮播已停（进程退出）"，体验坏。
+
+修复：`stopRotateNow()` 两条路径（child-handle / pid-fallback 兜底）**都**在 kill 后
+读当前状态 + 覆盖 `running:false`。父进程是状态权威，不信子进程会自己清理。
+
+教训补丁：
+26. **Windows 上 child.kill() 不投递信号，TerminateProcess 直接终止**。任何"kill 子进程
+    后期望它跑清理逻辑"的设计在 Windows 上必坏。父进程必须自己负责清理共享状态
+    （文件/锁/注册表）。Linux/Mac 的 SIGTERM 优雅关闭在 Windows 不成立——要么父进程兜底，
+    要么用 job object / 父子进程关系。这是教训 12（跨进程胶水必真机跑）的 Windows 特化版：
+    信号语义跨 OS 不一致，单测（默认 Linux 语义）抓不到。
+
+### 已知遗留
+
+- **rotate 是 control-server 的子进程（非独立窗口）**：control-server 关则 rotate 被连带杀
+  （OS 级），和 reader"关窗即停"一致的模型。要脱离 control-server 独立跑可直连
+  `node lib/rotate.cjs --image --interval <ms>`。
+- **视频用纯定时器不监听 ended**：可能切掉一个还没播完的视频。视频壁纸是动态背景不是
+  "看片"，可接受（spec §3.4）。
+- **临时 css 残留**：rotate 崩溃没清掉的 `zcode-rotate-*.css` 在系统 temp，rotate 启动时
+  扫描清理（spec §8）。OS 也会清。
+- **图片轮播需要 wallpapers-thumb/ 非空**：空池子 rotate 直接 exit 1（和 inject 空池行为
+  对称）。这台机器当前 wallpapers-thumb/ 为空，所以图片轮播没真机验过；视频轮播（wallpapers-video/
+  20 个 mp4）已真机验过 3 次切换 + 启停 + stale 探活全链路。
+
+---
+
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → statustest → controlservertest → statusviewtest → shelftest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
+
+`rotatetest.cjs` 测 `lib/rotate.cjs` 的纯函数：`pickRandomExcluding`（空池/单元素/排除上次/
+lastFile 不在池）、`parseInterval`（非法/越界 clamp/默认）、`readState`/`writeState`（缺失/
+坏 JSON/原子写）、`buildImageCss`（base + background-image 拼接）。rotate↔inject 的 spawn
+链路和 pid 探活靠真机验证（教训 12/13：跨进程胶水单测验不全；Windows kill 不触发 SIGTERM
+那个 bug 就是真机跑出来的，见上面"壁纸轮播"章节）。
 
 `menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：10 个场景 + 退出项齐全、顺序对、
 每个场景的中文说明和"调用哪些脚本"标注都在、7 个底层脚本名至少出现一次。
