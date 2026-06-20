@@ -34,7 +34,7 @@ set "WP_ROOT=%~dp0"
 set "WP_ROOT=%WP_ROOT:~0,-1%"
 
 REM ---------- Step 1: Node pre-check ----------
-echo [start] Step 1/3: checking Node.js ...
+echo [start] Step 1/4: checking Node.js ...
 where node >nul 2>nul
 if errorlevel 1 (
   echo [start]   Node.js not found.
@@ -46,12 +46,12 @@ if errorlevel 1 (
 echo [start]   Node.js OK.
 
 REM ---------- Step 2: launch ZCode with debug port ----------
-echo [start] Step 2/3: launching ZCode in debug mode ^(may restart ZCode^) ...
+echo [start] Step 2/4: launching ZCode in debug mode ^(may restart ZCode^) ...
 call "%WP_ROOT%\bin\launch-zcode.bat"
 set rc=!errorlevel!
 if not "!rc!"=="0" (
   echo.
-  echo [start] Step 2/3 FAILED ^(rc=!rc!^). ZCode did not come up with a debug port.
+  echo [start] Step 2/4 FAILED ^(rc=!rc!^). ZCode did not come up with a debug port.
   echo [start] Possible causes: ZCode.exe not found, still loading, or another
   echo [start] ZCode blocked launch. See messages above from launch-zcode.bat.
   echo [start] Control center was NOT started. Fix the above and run start.bat again.
@@ -60,13 +60,21 @@ if not "!rc!"=="0" (
 echo [start]   ZCode ready with debug port 9222.
 
 REM ---------- Step 3: start control-server (persistent window) ----------
-echo [start] Step 3/3: starting control-center server ^(persistent window^) ...
+echo [start] Step 3/4: starting control-center server ^(persistent window^) ...
 start "ZCode Control Center Server" cmd /k node "%WP_ROOT%\lib\control-server.cjs"
 echo [start]   Control-center server launched in a separate window.
 echo [start]   It will print the URL and copy it to your clipboard.
+
+REM ---------- Step 4: auto-open control center in ZCode's browser panel ----------
+echo [start] Step 4/4: trying to auto-open control center in ZCode browser panel ...
+REM  Give the server a moment to listen before navigating a webview to it
+REM  (start cmd /k is async; without a delay the navigation may hit a dead port).
+ping -n 4 127.0.0.1 >nul 2>nul
+node "%WP_ROOT%\lib\open-in-zcode.cjs"
 echo.
 echo [start] ========================================================
-echo [start]  All done! Next: in ZCode, open the browser panel and paste:
+echo [start]  All done! Control center should have opened in ZCode browser panel.
+echo [start]  If not, open the panel and paste this URL:
 echo [start]    http://127.0.0.1:17890/control/
 echo [start]  ^(already in your clipboard^)
 echo [start]  Then drive wallpaper / video / transparent / reader from there.
