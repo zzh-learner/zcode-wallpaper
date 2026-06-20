@@ -200,6 +200,21 @@
 
       setupDrag();
       renderShelf();
+
+      // Deep-link: if URL has ?book=<id>, open that book directly (control center
+      // shelf click -> /reader/?book=<id>). Needs http mode (fetch /api/books
+      // to resolve filename). book-router.js is loaded as window.__readerBookRouter.
+      if (window.__readerBookRouter && bookApi.isHttpMode()) {
+        var bid = window.__readerBookRouter.parseBookParam(location.search);
+        if (bid) {
+          fetch("/api/books").then(function (r) { return r.json(); }).then(function (books) {
+            var b = null;
+            for (var i = 0; i < books.length; i++) { if (books[i].id === bid) { b = books[i]; break; } }
+            if (b) openBook(b.id, b.filename);
+            else showErr("?book=" + bid + " 没找到对应的书");
+          }).catch(function () { /* ignore; shelf still rendered */ });
+        }
+      }
     } catch (e) { showErr("初始化失败: " + e.message); }
   }
 

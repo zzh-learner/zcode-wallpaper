@@ -13,5 +13,15 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 input { background: rgba(0, 0, 0, 0.3); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 3px; width: 50px; }
 .ok { color: #66bb6a; } .warn { color: #ffb74d; } .muted { color: #aaa; }
-#shelf-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; }
+#shelf-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex; align-items: center; justify-content: space-between; }
 #shelf-list .book.stale { color: #ff8a80; }
+#shelf-list .book-open { cursor: pointer; flex: 1; }
+#shelf-list .book.addable { cursor: default; }
+#shelf-list .book.addable span { flex: 1; color: #ccc; }
+#shelf-list .book-del, #shelf-list .book-add { padding: 0 6px; margin: 0; font-size: 12px; line-height: 18px; }
+#shelf-list .book-del:hover { background: rgba(255, 100, 100, 0.3); }
+#shelf-list .book-add:hover { background: rgba(100, 200, 100, 0.3); }
+.shelf-section-title { font-size: 12px; color: #ffb74d; margin: 10px 0 4px 0; font-weight: bold;
+  border-bottom: 1px solid rgba(255,183,77,0.3); padding-bottom: 2px; }
+.shelf-section-title:first-child { margin-top: 0; }
