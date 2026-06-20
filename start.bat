@@ -6,26 +6,24 @@ title ZCode 一键启动 (调试模式 + 控制中心)
 REM ============================================================
 REM  ZCode Wallpaper - one-click entry point.
 REM  ----------------------------------------------------------
-REM  Does THREE things in one double-click:
+REM  Double-click start.VBS (not this .bat) for a fully invisible run:
+REM  no console windows at all, only ZCode appears. This .bat is what the
+REM  .vbs launches hidden; it can also be double-clicked directly when you
+REM  WANT to see the log output (e.g. debugging a failed launch).
+REM
+REM  Does THREE things:
+REM    Step 0: kill any OLD control-server (so re-running this is clean — no
+REM            need to hunt the old node in Task Manager)
 REM    Step 1: pre-check Node.js (needed by launch probe + control-server)
-REM    Step 2: launch ZCode WITH debug port (delegates to bin/launch-zcode.bat,
-REM            which taskkills any running ZCode first, then starts with
-REM            --remote-debugging-port=9222, then waits for the window+port
-REM            to be ready). This is the ONLY way to get CDP, which wallpaper
-REM            injection + control center status both require.
-REM    Step 3: start control-server in a PERSISTENT separate window
-REM            (control-center SPA + reader SPA + status/action API). It prints
-REM            the URL and copies http://127.0.0.1:17890/control/ to clipboard.
+REM    Step 2: launch ZCode WITH debug port (bin/launch-zcode.bat taskkills
+REM            any running ZCode first, then starts with
+REM            --remote-debugging-port=9222, waits for window+port ready)
+REM    Step 3: start control-server HIDDEN (no console window). It serves
+REM            the control-center SPA + reader SPA + status/action API and
+REM            copies http://127.0.0.1:17890/control/ to the clipboard.
 REM
-REM  After this finishes: ZCode is open in debug mode + control-server is
-REM  running. Paste the clipboard URL into ZCode's browser panel to open the
-REM  control center, then drive everything (wallpaper/video/transparent/reader)
-REM  from its buttons.
-REM
-REM  Why taskkill the old ZCode? Because ZCode started normally (double-click)
-REM  has NO debug port, and Electron won't add it at runtime. The only way to
-REM  get CDP is to relaunch with the flag, which requires killing the current
-REM  instance (single-instance lock). Unavoidable cost of the CDP approach.
+REM  Stopping the server: just run start.vbs/start.bat again — Step 0 kills
+REM  the old one. No Task Manager needed.
 REM
 REM  ASCII-only in this .bat (node prints Chinese itself).
 REM ============================================================
@@ -33,15 +31,22 @@ REM ============================================================
 set "WP_ROOT=%~dp0"
 set "WP_ROOT=%WP_ROOT:~0,-1%"
 
+REM ---------- Step 0: kill any old control-server (clean re-run) ----------
+REM  Match node processes whose command line contains control-server.cjs.
+REM  Precise — won't kill other node processes (ZCode's own, dev tools, etc).
+echo [start] Step 0/3: stopping any old control-center server ...
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*control-server.cjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+echo [start]   done.
+
 REM ---------- Step 1: Node pre-check ----------
 echo [start] Step 1/3: checking Node.js ...
 where node >nul 2>nul
 if errorlevel 1 (
   echo [start]   Node.js not found.
-  echo [start]   Install Node.js LTS from https://nodejs.org then run start.bat again.
+  echo [start]   Install Node.js LTS from https://nodejs.org then run start.vbs again.
   echo.
   pause
-  goto :hold
+  goto :eof
 )
 echo [start]   Node.js OK.
 
@@ -54,16 +59,23 @@ if not "!rc!"=="0" (
   echo [start] Step 2/3 FAILED ^(rc=!rc!^). ZCode did not come up with a debug port.
   echo [start] Possible causes: ZCode.exe not found, still loading, or another
   echo [start] ZCode blocked launch. See messages above from launch-zcode.bat.
-  echo [start] Control center was NOT started. Fix the above and run start.bat again.
-  goto :hold
+  echo [start] Control center was NOT started. Fix the above and run start.vbs again.
+  echo.
+  pause
+  goto :eof
 )
 echo [start]   ZCode ready with debug port 9222.
 
-REM ---------- Step 3: start control-server (persistent window) ----------
-echo [start] Step 3/3: starting control-center server ^(persistent window^) ...
-start "ZCode Control Center Server" cmd /k node "%WP_ROOT%\lib\control-server.cjs"
-echo [start]   Control-center server launched in a separate window.
-echo [start]   It will print the URL and copy it to your clipboard.
+REM ---------- Step 3: start control-server HIDDEN (no console window) ----------
+echo [start] Step 3/3: starting control-center server ^(hidden, no window^) ...
+REM  Start-Process -WindowStyle Hidden: server runs in background with NO window.
+REM  Verified: MainWindowHandle=0, no taskbar entry, but API still reachable.
+REM  Clipboard write happens inside control-server.cjs as before.
+powershell -NoProfile -Command "Start-Process -FilePath node -ArgumentList '\"\"%WP_ROOT%\\lib\\control-server.cjs\"\"' -WorkingDirectory '%WP_ROOT%' -WindowStyle Hidden" >nul 2>nul
+REM  Give the server a moment to listen + write clipboard before we finish.
+ping -n 3 127.0.0.1 >nul 2>nul
+echo [start]   Control-center server started in background ^(no window^).
+echo [start]   URL copied to clipboard.
 echo.
 echo [start] ========================================================
 echo [start]  All done! Now in ZCode:
@@ -72,15 +84,11 @@ echo [start]    2. Paste this URL into the address bar and press Enter:
 echo [start]       http://127.0.0.1:17890/control/
 echo [start]       ^(already in your clipboard^)
 echo [start]  Then drive wallpaper / video / transparent / reader from there.
-echo [start]  Close the control-center server window to stop it.
+echo [start]  To stop the server: just run start.vbs/start.bat again.
 echo [start] ========================================================
 echo.
 echo [start] NOTE: auto-opening the browser panel was tried but is unreliable
 echo [start] ^(when the git tree has uncommitted changes, ZCode defaults the
 echo [start] sidebar to the review panel, not browser^). So open it manually.
 
-:hold
-echo.
-echo [start] Press any key to close this launcher window ...
-pause >nul
 endlocal
