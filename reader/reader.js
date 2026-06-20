@@ -99,6 +99,29 @@
     box.appendChild(d);
   }
 
+  // Scroll #sidebar so the current TOC chapter is centered.
+  // The scroll container is #sidebar (overflow-y:auto), NOT #toc-list (which is
+  // overflow:visible with scrollHeight==clientHeight — probed: scrollIntoView on
+  // .chap is a no-op there). So set #sidebar.scrollTop directly via offsetTop
+  // measured relative to #sidebar. sb is the sidebar element (optional; defaults
+  // to #sidebar). Uses a rAF+delay so layout (width transition on expand) is
+  // applied before measuring.
+  function scrollTocToCurrent(sb) {
+    sb = sb || $("sidebar");
+    if (!sb) return;
+    requestAnimationFrame(function () {
+      setTimeout(function () {
+        var cur = document.querySelector("#toc-list .chap.current");
+        if (!cur) return;
+        // offsetTop chain up to #sidebar
+        var off = 0, node = cur;
+        while (node && node !== sb) { off += node.offsetTop; node = node.offsetParent; }
+        var target = off - sb.clientHeight / 2 + cur.clientHeight / 2;
+        sb.scrollTop = Math.max(0, target);
+      }, 0);
+    });
+  }
+
   async function showChapter(n, restoreRatio) {
     if (!currentBook) return;
     var ch = await currentBook.getChapter(n);
@@ -113,9 +136,9 @@
     [].forEach.call(document.querySelectorAll("#toc-list .chap"), function (el) {
       el.classList.toggle("current", parseInt(el.dataset.idx, 10) === n);
     });
-    // scroll current into view in toc
-    var cur = document.querySelector("#toc-list .chap.current");
-    if (cur) cur.scrollIntoView({ block: "nearest" });
+    // scroll current chapter into view in sidebar (scrollTocToCurrent handles
+    // the real scroll container; the old scrollIntoView was a no-op — probed).
+    scrollTocToCurrent();
     // restore scroll ratio
     var reader = $("reader");
     reader.scrollTop = restoreRatio ? restoreRatio * (reader.scrollHeight - reader.clientHeight) : 0;
@@ -190,17 +213,8 @@
       $("btn-shelf").onclick = function () {
         var sb = $("sidebar");
         sb.classList.toggle("collapsed");
-        // When EXPANDING the sidebar (collapsed removed), scroll the TOC to the
-        // current chapter. showChapter's scrollIntoView runs while the sidebar is
-        // often still collapsed (width:0 + overflow:hidden) where it's unreliable,
-        // so re-scroll here once the sidebar is actually visible. Use a microtask
-        // delay so the layout (width transition) has applied.
-        if (!sb.classList.contains("collapsed") && currentChapter >= 0) {
-          setTimeout(function () {
-            var cur = document.querySelector("#toc-list .chap.current");
-            if (cur) cur.scrollIntoView({ block: "center" });
-          }, 20);
-        }
+        // When EXPANDING the sidebar, scroll the current chapter into view.
+        scrollTocToCurrent(sb);
       };
       $("font-inc").onclick = function () { setFont(1); };
       $("font-dec").onclick = function () { setFont(-1); };
