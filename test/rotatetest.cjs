@@ -30,5 +30,41 @@ check("parse: exactly floor (10000) -> 10000", rotate.parseInterval("10000", 300
 check("parse: above ceiling (99999999) -> clamped to 86400000", rotate.parseInterval("99999999", 300000) === 86400000);
 check("parse: exactly ceiling (86400000) -> 86400000", rotate.parseInterval("86400000", 300000) === 86400000);
 
+// === readState / writeState (spec §4.4) ===
+var fs = require("fs"), os = require("os"), path = require("path");
+var tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rotate-"));
+var statePath = path.join(tmpDir, rotate.STATE_FILENAME);
+
+// readState on missing file -> { running: false }
+check("readState: missing file -> { running: false }", rotate.readState(statePath).running === false);
+
+// writeState then readState round-trips
+rotate.writeState(statePath, {
+  running: true, mode: "image", intervalMs: 300000, lastSwitchAt: 1718,
+  nextSwitchAt: 2000, lastFile: "a.jpg", pid: 123, poolSize: 5, consecutiveFailures: 0,
+});
+var rd = rotate.readState(statePath);
+check("readState: round-trip running", rd.running === true);
+check("readState: round-trip mode", rd.mode === "image");
+check("readState: round-trip intervalMs", rd.intervalMs === 300000);
+check("readState: round-trip lastFile", rd.lastFile === "a.jpg");
+check("readState: round-trip pid", rd.pid === 123);
+check("readState: round-trip poolSize", rd.poolSize === 5);
+
+// writeState overwrites (not merges) — new values replace old
+rotate.writeState(statePath, { running: false });
+check("writeState: overwrites running", rotate.readState(statePath).running === false);
+check("writeState: overwrite drops old fields (no mode)", rotate.readState(statePath).mode === undefined);
+
+// readState on corrupt JSON -> { running: false } (no throw)
+fs.writeFileSync(statePath, "{ not valid json");
+check("readState: corrupt json -> { running: false } no throw", rotate.readState(statePath).running === false);
+
+// readState on null/empty path -> { running: false } no throw
+check("readState: null path -> { running: false }", rotate.readState(null).running === false);
+
+// cleanup
+try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
