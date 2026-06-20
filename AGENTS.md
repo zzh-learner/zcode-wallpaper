@@ -292,6 +292,59 @@ localStorage 共享 origin 污染）。差点走错路。
 
 ---
 
+## 核心教训 5：别信"应该能透/应该能滚"，用探测脚本读真实 DOM 状态（2026-06）
+
+第五次大坑，做控制中心时连续踩的。和前四个同型——**先验假设错了（"应该 X"），全白干**。
+这次一连三个子坑，全靠**探测脚本读真实 computed state / getBoundingClientRect** 才定位，
+没有一个靠读代码或猜猜出来的。
+
+### 子坑 A：webview 能不能透壁纸
+
+brainstorm 时我断言"webview 必盖壁纸"（基于 CSS 常识），又有人说"reader 能透"。
+两个都是猜。`scripts/inspect-webview.cjs` 一跑：**webview 元素及整条祖先链全是 `rgba(0,0,0,0)`**
+（wallpaper.css 设 transparent 的效果），是**页面自己**画实色背景盖住。结论：页面写
+`background:transparent` 就透。控制中心的整个 A1 设计依据是这个探测，不是任何 CSS 常识。
+
+### 子坑 B：目录滚不到当前章（offsetParent 链走不通）
+
+reader 展开侧栏，目录不滚到当前章。我连改三版：`scrollIntoView` → `offsetTop` 沿 offsetParent
+链累加 → `getBoundingClientRect`。前两版都失败，因为：
+- `scrollIntoView`：`#toc-list` 是 `overflow:visible` 且 `scrollHeight==clientHeight`，**它不能滚**
+  （真正能滚的是 `#sidebar`）——探测 `tocOverflowY: "visible"` 才知道
+- `offsetTop` 链：`.chap.offsetParent` 是 `BODY` 不是 `#sidebar`，**链根本走不到 #sidebar**，
+  累加结果是错的（滚到 71 章而非 5 章）——探测 offsetParent 链才知道
+- 最后用 `getBoundingClientRect` 差值（`cur.top - sidebar.top`，视口坐标，天然包含书架区偏移），
+  探测验证"第五章居中位置 292 ≈ 理想 293"才确认。
+
+用户的一个猜想（"目录不只有当前书，还有书架占了空间"）也帮了忙——指向了"书架区在 #sidebar
+里占了滚动空间"这个被忽略的事实。
+
+### 子坑 C：自动打开面板（驱动地址栏）
+
+想让 start.bat 自动在 ZCode 浏览器面板打开控制中心。合成 `keydown Enter` 不触发导航
+（React 表单不认合成键盘事件）——探测发现地址栏在 `<form>` 里，`form.requestSubmit()` 才行。
+又发现"展开侧边面板"按钮在 git working tree 脏时会打开**审查面板**而非浏览器（用户发现的）。
+最终因为边界太常见（用未合并分支就一直触发）放弃自动打开。
+
+### 规则补丁（抄进脑子里）
+
+21. **"应该能 X"是假设，用探测脚本读真实 state 是事实。** webview 能不能透、元素能不能滚、
+    事件监不监听——全靠 `getComputedStyle`/`getBoundingClientRect`/`offsetParent` 探测，别用
+    CSS 常识或"应该"推理。教训 11（探测脚本优先）的第三次重演。
+22. **offsetParent 链不可靠（可能通向 BODY 而非你以为的容器），跨元素定位用 getBoundingClientRect 差值。**
+    `cur.top - container.top` 是视口坐标差，自动包含中间所有元素（书架区、padding）的偏移，
+    不依赖 offsetParent 关系。
+23. **合成 DOM 事件（keydown/click）经常不被框架认，用框架的原生提交路径（form.requestSubmit）或 CDP Input 域。**
+    React 表单不监听合成 KeyboardEvent；要模拟"回车提交"，`form.requestSubmit()` 才可靠。
+24. **"展开/收起"这类通用按钮可能随上下文切换目标。** ZCode 的"展开侧边面板"在 working tree
+    脏时展开审查面板、干净时展开浏览器面板——同一按钮不同结果。靠它做自动化不可靠，
+    要找**专属**触发器，或接受不可靠降级。
+25. **用户给的输出边界 + 用户自己的猜想，都是强信号，别忽略。** 这次子坑 B 用户一句"目录不只有
+    当前书还有书架"直接点向根因；子坑 C 用户发现"树脏时开审查"纠正了我所有受污染的探测。
+    和教训 1（用户输出边界是最强信号）同型。
+
+---
+
 ## 视频壁纸（`--video` 模式）
 
 图片壁纸之外的第二种背景：把 `.mp4`（等视频）当动态背景播。和图片走**同一个 `inject.cjs`**，
@@ -556,9 +609,110 @@ CDP `/json` 返回的 webview `webSocketDebuggerUrl` 是 `ws://localhost/devtool
 
 ---
 
+## 控制中心（带界面的统一控制台）
+
+第五种能力。把前四种（图片/视频壁纸、窗口透明、阅读器）收进**一个带界面的面板**。
+和前四种**完全不同的层**：那四种各自改 ZCode 某一面，控制中心是个**统一操作台 + 状态显示器**。
+
+### 为什么不是又一个 inject mode
+
+控制中心不是"往 ZCode 塞个新东西"，而是**给已有的四个子系统套一个 UI**。核心原则
+（spec 定的，两轮审查后固化）：**控制中心是「触发器 + 状态显示器」，绝不重写任何子系统的
+动作逻辑**。动作全靠 spawn 现有命令（`inject.cjs`/`transparent.ps1`/`resize.cjs`/`setup.cjs`），
+只新增「查询」能力（且查询抽成共享模块）。两份动作逻辑 = 两份能各自再坏一次的机会（教训 1）。
+
+### 四个组件
+
+- `lib/control-server.cjs` —— 合并的常驻 HTTP server。由 `reader-server.cjs` 演进：
+  静态托管 `control/` + `reader/`、小说 API（从 reader 迁入）、`/api/status`（轮询）、
+  `/api/action`（触发）、`/api/job/:id`。`reader-server.cjs` 现在是**兼容 wrapper**
+  （导出 createServer 委托 control-server），`test/readerservertest.cjs` 不动。
+- `lib/cdp.cjs` —— **只读** CDP 共享模块。`filterTargets`/`listTargets`/`connect`/`probeWallpaperMode`。
+  `inject.cjs` 也改 `require('./cdp.cjs')` 复用（消除两份 CDP 胶水）。**背景**：spec 原写"复用 inject.cjs
+  已导出的 listTargets"是事实错误——它根本没导出（核实 inject.cjs 导出列表无 listTargets/connect/verifyExpression）。
+- `lib/status.cjs` —— 纯只读状态查询。`snapshot()` 返回 5 项快照（ZCode/壁纸/透明/阅读器/资源），
+  **探查失败不致命**（单项 null + `_meta.probeErrors`，整体仍 200）。透明走状态机（见下）+ 500ms 缓存。
+- `control/` —— 前端 SPA。`body{background:transparent !important}` 让壁纸透出（A1：页面自带透明 CSS，
+  不依赖壁纸已注入）。浮动控件 + 书架管理。前端 lib 双导出（CommonJS + `window.__ccXxx`）。
+
+### 透明透壁纸的机制（实测确认，纠正了 brainstorm 里的误判）
+
+brainstorm 过程中有两个误判被 `scripts/inspect-webview.cjs` 纠正：
+- 误判 A："webview 必盖壁纸" → 错。**webview 元素及整条祖先链全是 `rgba(0,0,0,0)`**
+  （wallpaper.css 把 `--color-background` 设 transparent 的效果），壁纸能透到 webview 后面。
+- 误判 B："reader 能透壁纸所以 webview 能透" → 错。reader 其实有自己的实色底（reader.css 主题色），
+  没透。**真相**：页面自己写 `background:transparent` 就能透壁纸——控制中心的设计依据。
+
+### CDP target 过滤（spec §5.4）
+
+控制中心和 reader 自己跑在 ZCode webview 里，**它们也是 page target**。不过滤会：
+① status 把它们算进 `pageTargets`/`injectedWindows`；② inject 误注入工具页。
+`cdp.cjs` 的 `filterTargets` 按**路径前缀**（`/control/`、`/reader/`、`/api/`）+ host localhost/127.0.0.1
+**任意端口**排除（不按端口——standalone inject.cjs 不知道 server 端口，端口漂移也要正确排除）。
+**remove 也走过滤**（不做 mode-aware：工具页从不会被注入，"旧版本残留"是假想场景，YAGNI）。
+
+### 透明状态机（spec §10，单一权威定义）
+
+控制中心轮询**不能 read-host**（会卡住）。server 内存记"上次 setTransparent 的 hwnd"
+（设透明加 `-Json` 输出 hwnd，server 解析存下）。查询决策树：
+- 有 hwnd → `transparent.ps1 -Query -Hwnd <n>` 直接查（快、准）
+- 无 hwnd（server 重启/用户从旧菜单设的）→ `-Query -ProcessName ZCode` 兜底（多候选自动选面积最大，**不 read-host**）
+- ZCode 没开 / 窗口明确未 layered → `enabled:false`（**确定**）
+- ZCode 开着但多候选无法确定主窗口 → `enabled:"unknown"`（**唯一** unknown 场景，极罕见）
+- spawn PS 报错/超时 → 该项 `null` + probeErrors（查询失败，不是 unknown）
+
+**`false` vs `unknown` 边界定死**：unknown 只在"无法确定查哪个窗口"时，不是"没 hwnd 就 unknown"。
+
+### 动作 spawn 契约（spec §5.2，审查 P2-1）
+
+server 收 `/api/action` → spawn 现有命令。契约写死（不靠 PATH）：
+- node 命令用 `process.execPath`（当前 node 绝对路径）
+- PowerShell 用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <绝对路径>`（AGENTS.md：PS 一律 `-File`）
+- `cwd` = 项目根（server 用 `__dirname` 推算）
+- 异步：立即返回 jobId，不等 spawn 完成；前端靠下一次 status 轮询看效果（**成功判定以真实 DOM 状态为准，不信 exit code**，教训 3）
+- 全局锁：动作进行中再请求 → 409（不做队列，YAGNI）
+
+### 没有 startZcode action（重要设计决定）
+
+控制中心跑在 ZCode webview 里，用户正常开 ZCode 不带 debug port → 注入必败。曾想加 startZcode
+action（spawn launch-zcode.bat），但**那是错的**：launch-zcode.bat Step 1 `taskkill /f /im ZCode.exe`
+会杀掉当前 ZCode → **控制中心自己（在 webview 里）连带着被杀**，按钮把自己干掉。改为：debug port
+不通时**禁用 CDP 按钮 + 引导**用户从 `wallpaper.bat` 场景 2 重启（不自杀）。`open-in-zcode.cjs` 保留备用。
+
+### 端口固定 17890（不是自增）
+
+书架/进度存 localStorage，**localStorage 绑 origin**（`http://127.0.0.1:17890` ≠ `:17891`），
+端口自增会让书架"看起来丢了"。所以**默认固定 17890**，只有被占且无法释放才 +1 兜底 +
+前端横幅提示"端口漂移，书架进度可能不同步"。
+
+### 书架（localStorage，reader 和控制中心共享）
+
+书架数据在 localStorage（key `zcode-reader:shelf`），**reader 和控制中心同 origin 共享**。
+- reader 看书滚动/翻章 → `addToShelf` 写 localStorage（`reader/lib/progress.js`）
+- 控制中心每 2 秒轮询重读 → 显示最新进度
+- 控制中心书架分两区：「我的书架」（点书跳 `/reader/?book=<id>`、✕ 删除）+「全部小说」（server `/api/books`
+  差集，+ 加入）。`shelf.js` 纯函数：`shelfDiff`/`makeShelfEntry`/`addToShelf`/`resolveStaleBookId`（关联修复，
+  只按 filename 匹配，不做 content hash）。
+- reader 加了 `?book=<id>` 深链（`reader/lib/book-router.js` 纯函数）：控制中心点书 → reader 自动打开那本。
+
+### start.bat 一站式入口
+
+双击 `start.bat`（根目录）：Node 预检 → launch-zcode.bat（带 9222 重启 ZCode）→ 起 control-server（写剪贴板）。
+**不自动打开浏览器面板**：试过用 CDP 驱动地址栏，但 ZCode 在 git working tree 有未提交修改时默认开审查面板
+（不是浏览器面板），自动打开太不可靠，已移除。需手动开浏览器面板 + 粘 `/control/`。
+
+### 已知遗留
+
+- **自动打开面板没做**（见上，边界太常见）
+- **透明 alpha 查询的 PS 字段索引**：`-Query` 分支要么复用 transparent.ps1 现有 6 字段 Dump（注意索引，教训 3），
+  要么单独写精简 alpha-only Dump。实现已选按 hwnd 直查（不走 Dump），规避了索引坑。
+- **普通浏览器打开控制中心**：降级体验（没壁纸透出，但控件仍能用）。不做检测（YAGNI）。
+
+---
+
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → statustest → controlservertest → statusviewtest → shelftest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：10 个场景 + 退出项齐全、顺序对、
