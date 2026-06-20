@@ -187,7 +187,21 @@
   // ---- wiring ----
   function init() {
     try {
-      $("btn-shelf").onclick = function () { $("sidebar").classList.toggle("collapsed"); };
+      $("btn-shelf").onclick = function () {
+        var sb = $("sidebar");
+        sb.classList.toggle("collapsed");
+        // When EXPANDING the sidebar (collapsed removed), scroll the TOC to the
+        // current chapter. showChapter's scrollIntoView runs while the sidebar is
+        // often still collapsed (width:0 + overflow:hidden) where it's unreliable,
+        // so re-scroll here once the sidebar is actually visible. Use a microtask
+        // delay so the layout (width transition) has applied.
+        if (!sb.classList.contains("collapsed") && currentChapter >= 0) {
+          setTimeout(function () {
+            var cur = document.querySelector("#toc-list .chap.current");
+            if (cur) cur.scrollIntoView({ block: "center" });
+          }, 20);
+        }
+      };
       $("font-inc").onclick = function () { setFont(1); };
       $("font-dec").onclick = function () { setFont(-1); };
       $("theme-toggle").onclick = function () {
