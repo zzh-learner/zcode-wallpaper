@@ -53,3 +53,8 @@ nul
 # Add your .txt to novels/ (ignored below) — same privacy rule as wallpapers/.
 novels/*
 !novels/.gitkeep
+
+# Wallpaper rotation runtime state (written by lib/rotate.cjs, read by status).
+# Never commit — it's machine-local runtime data.
+.rotate.json
+.rotate.json.tmp
