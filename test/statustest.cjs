@@ -18,6 +18,7 @@ const merged = status.mergeProbeResults({
   transparent: { enabled: true, opacityPct: 78 },
   reader: null,
   resources: { images: 5 },
+  rotate: { running: false },
 });
 check("merge keeps non-null zcode", merged.zcode.running === true);
 check("merge null wallpaper -> null field", merged.wallpaper === null);
@@ -57,6 +58,33 @@ const fs = require("fs"), os = require("os"), path = require("path");
   // it must NOT crash. Don't assume CDP down — test env may have ZCode running.
   check("snapshot zcode is object-or-null (no crash)", s.zcode === null || (s.zcode && typeof s.zcode.running === "boolean"));
   check("snapshot _meta always has probeErrors array", Array.isArray(s._meta.probeErrors));
+
+  // === probeRotate (spec §5.1): three states ===
+  // (1) no .rotate.json -> { running: false }
+  const rotateRoot1 = fs.mkdtempSync(path.join(os.tmpdir(), "rot-"));
+  check("probeRotate: no state file -> running false", (await status.probeRotate(rotateRoot1)).running === false);
+  // (2) state file running:true + a pid that's NOT alive (we pick a huge pid) -> stale
+  fs.writeFileSync(path.join(rotateRoot1, ".rotate.json"), JSON.stringify({
+    running: true, mode: "image", intervalMs: 300000, lastFile: "x.jpg",
+    pid: 99999999, poolSize: 3, nextSwitchAt: Date.now() + 60000, lastSwitchAt: Date.now(),
+  }));
+  var st2 = await status.probeRotate(rotateRoot1);
+  check("probeRotate: dead pid -> running false", st2.running === false);
+  check("probeRotate: dead pid -> stale true", st2.stale === true);
+  // (3) state file running:true + pid = current process (alive) -> running true with fields
+  fs.writeFileSync(path.join(rotateRoot1, ".rotate.json"), JSON.stringify({
+    running: true, mode: "video", intervalMs: 600000, lastFile: "v.mp4",
+    pid: process.pid, poolSize: 2, nextSwitchAt: 9999, lastSwitchAt: 1111, consecutiveFailures: 0,
+  }));
+  var st3 = await status.probeRotate(rotateRoot1);
+  check("probeRotate: live pid -> running true", st3.running === true);
+  check("probeRotate: live pid -> mode video", st3.mode === "video");
+  check("probeRotate: live pid -> intervalMs 600000", st3.intervalMs === 600000);
+  check("probeRotate: live pid -> lastFile v.mp4", st3.lastFile === "v.mp4");
+  check("probeRotate: live pid -> poolSize 2", st3.poolSize === 2);
+  check("probeRotate: live pid -> NO stale flag", st3.stale === undefined);
+  try { fs.rmSync(rotateRoot1, { recursive: true, force: true }); } catch (e) {}
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail === 0 ? 0 : 1);
 })();
