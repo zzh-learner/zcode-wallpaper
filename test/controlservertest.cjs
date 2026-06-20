@@ -49,6 +49,28 @@ function httpReq(method, url, body) {
     // reader still served (兼容)
     const rd = await httpReq("GET", base + "/reader/");
     check("/reader/ still served (兼容)", rd.status === 200 && rd.body.indexOf("<title>") !== -1);
+    // === rotate actions (spec §6) ===
+    // stopRotate with nothing running -> 200 accepted
+    const stop1 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "stopRotate" }));
+    check("stopRotate (nothing running) -> 200", stop1.status === 200);
+    check("stopRotate -> accepted true", JSON.parse(stop1.body).accepted === true);
+    // startRotateImage with a tiny interval -> 200 + jobId (rotates wallpapers-thumb which is empty here, so rotate child will exit 1, but action dispatch still accepted)
+    const start1 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "startRotateImage", intervalMs: 60000 }));
+    check("startRotateImage -> 200", start1.status === 200);
+    check("startRotateImage -> jobId present", typeof JSON.parse(start1.body).jobId === "string");
+    // give child a moment to start + exit (empty pool)
+    await new Promise(r => setTimeout(r, 300));
+    // stopRotate cleans up (child already dead from empty pool, but no error)
+    const stop2 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "stopRotate" }));
+    check("stopRotate after start -> 200", stop2.status === 200);
+    // bad interval (NaN string) -> still accepted, server uses default (doesn't crash)
+    const start2 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "startRotateVideo", intervalMs: "notanumber" }));
+    check("startRotateVideo bad interval -> 200 (default used)", start2.status === 200);
+    await new Promise(r => setTimeout(r, 300));
+    const stop3 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "stopRotate" }));
+    check("stopRotate after video start -> 200", stop3.status === 200);
+    // cleanup any .rotate.json the test wrote into tmp root
+    try { require("fs").unlinkSync(path.join(root, ".rotate.json")); } catch (e) {}
   } finally { srv.close(); }
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail === 0 ? 0 : 1);
