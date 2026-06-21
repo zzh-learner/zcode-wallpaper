@@ -530,6 +530,14 @@ reader 检测 `location.protocol`：
 761 万字不能全量塞 DOM。server 启动时一次性解码 + 正则切章（卷/章两级），
 只把"当前章的段落数组"发给前端。前端永远只持有一章。
 
+**前言/后记识别只在 server 端**（`lib/reader-toc.cjs`，spec 2026-06-19-frontmatter-backmatter）：
+楔子/序/书籍介绍等前言、尾声/番外/后记/感言/（全文完）等后记会切成独立章节。
+前端 file 兜底模式的 `reader/lib/toc.js` **没有**这层——它只做基础卷/章切分。
+这是有意的：file 模式是降级兜底，前言/后记是锦上添花，不值得为兜底模式也镜像一份
+（两份能各自再坏一次，教训 1）。改 reader-toc 的前言/后记逻辑时**别**指望前端 toc.js
+跟着变——它是独立实现，靠 `readertoctest.cjs`（server）+ `readertocwebtest.cjs`（前端）
+两套测试分别钉。前端那套测试用例是有意不含前言/后记的。
+
 ### 编码：fatal UTF-8 是关键
 
 中文 txt 无 BOM、GB18030 为主。区分 UTF-8 vs GB18030 的决定性手段是
@@ -786,11 +794,15 @@ lastFile 不在池）、`parseInterval`（非法/越界 clamp/默认）、`readS
 链路和 pid 探活靠真机验证（教训 12/13：跨进程胶水单测验不全；Windows kill 不触发 SIGTERM
 那个 bug 就是真机跑出来的，见上面"壁纸轮播"章节）。
 
-`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：10 个场景 + 退出项齐全、顺序对、
-每个场景的中文说明和"调用哪些脚本"标注都在、7 个底层脚本名至少出现一次。
+`menutest.cjs` 测 `lib/menu.cjs` 的 `renderMenu()` 输出：13 个场景 + 退出项齐全、顺序对、
+每个场景的中文说明和"调用哪些脚本"标注都在、10 个底层脚本/动作名至少出现一次
+（`setup`/`resize`/`start-zcode`/`inject-only`/`remove-wallpaper`/`start-transparent`/`transparent`/
+`reader-server`/`reader-help`/`control-center`）。
 防止菜单被人改坏（删场景、改错调用链说明）却没人发现。
 （场景 7/8 是视频壁纸变体，calls 标注是 `start-zcode(video)` / `inject-only(video)`；
-场景 9/10 是窗口透明模式，calls 标注 `start-transparent` / `transparent`。）
+场景 9/10 是窗口透明模式，calls 标注 `start-transparent` / `transparent`；
+场景 11/12 是小说阅读器，calls 标注 `reader-server` / `reader-help`；
+场景 13 是控制中心，calls 标注 `control-center`。）
 
 `transparenttest.cjs` 测 `lib/windowselect.cjs` 的 `selectMainWindow` 纯函数：pid/visible/
 toplevel/零面积过滤、单候选自动选、多候选返回 `{ambiguous, candidates}`（按面积降序）。

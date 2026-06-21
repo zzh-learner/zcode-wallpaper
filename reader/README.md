@@ -4,7 +4,9 @@
 
 ## http 模式（推荐）
 启动 `bin/reader-server.bat` 后，在 ZCode 浏览器面板访问
-`http://localhost:17890/reader`。从书架选书即用。
+`http://localhost:17890/reader/`（**尾斜杠别省**：`/reader` 会被 server 302 重定向到
+`/reader/`，否则页面里的相对路径 `reader.css`/`lib/codec.js` 会解析成 `/reader.css`
+等根路径而 404，书架空 + JS 全 undefined）。从书架选书即用。
 
 ## file 模式（兜底）
 直接用 `file:///.../reader/index.html` 打开（拖入 .txt 阅读）。
@@ -54,4 +56,4 @@ reader 的纯逻辑模块可在普通浏览器或 Node 跑：
   真实 webview 里验多本）
 
 直接在浏览器开 `reader/index.html`（file://）+ 拖入任意 .txt 即可调试。
-要调 server 模式，先 `npm run reader` 起 server，再访问 `http://localhost:17890/reader`。
+要调 server 模式，先 `npm run reader` 起 server，再访问 `http://localhost:17890/reader/`（尾斜杠别省，见上）。
