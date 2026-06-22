@@ -9,7 +9,7 @@ html, body { margin: 0; height: 100%; background: transparent !important; color:
 /* Panels near-transparent so the wallpaper shows through broadly; backdrop blur
    + text-shadow keep content legible. Tune the 0.25 alpha up if text is hard to
    read on bright wallpapers, down if wallpaper is too obscured. */
-.panel { background: rgba(20, 20, 24, 0.25); border-radius: 8px; padding: 10px 12px; margin: 8px;
+.panel { background: rgba(20, 20, 24, 0); border-radius: 8px; padding: 10px 12px; margin: 8px;
   backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.12); }
 h3 { margin: 0 0 6px 0; font-size: 14px; }
 /* 书架标题行：h3 + 打开阅读器链接按钮横排 (打开阅读器从 #actions 移到书架, 语义更近) */
