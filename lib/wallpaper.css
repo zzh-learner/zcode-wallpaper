@@ -46,3 +46,13 @@ body {
 .bg-surface {
   background-color: transparent !important;
 }
+
+/* 4) 会话输入框外壳：它的容器框画了实色深灰（bg-input = rgb(43,43,43)），
+      聚焦态还会切到 bg-input-focused，把输入框区域的壁纸盖死。这里一并
+      强制透明，让输入框也能透出壁纸。仅这一处（bg-input 全页只命中输入框
+      相关元素），不碰 --color-card 等其它实色变量——先看效果再决定要不要
+      扩（AGENTS.md 核心教训 2：透明度旋钮对当前 UI 结构有效性需逐项验）。 */
+.bg-input,
+.focus-within\:bg-input-focused {
+  background-color: transparent !important;
+}
