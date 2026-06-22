@@ -29,13 +29,17 @@ check("excludes non-page (webview)", !filtered.some(t => t.type === "webview"));
 check("excludes target without webSocketDebuggerUrl", !filtered.some(t => !t.webSocketDebuggerUrl));
 check("exactly 1 target remains (the ZCode main page)", filtered.length === 1);
 
-// === classifyWallpaperDom (pure) — probeWallpaperMode's classification core ===
-check("classify: video present -> video", cdp.classifyWallpaperDom({ style: true, video: true, videoSrc: "file://x", bg: "url(x)" }) === "video");
-check("classify: style + bg not none -> image", cdp.classifyWallpaperDom({ style: true, video: false, videoSrc: "", bg: "url(x)" }) === "image");
-check("classify: no style -> none", cdp.classifyWallpaperDom({ style: false, video: false, videoSrc: "", bg: "none" }) === "none");
-check("classify: style but bg none -> none", cdp.classifyWallpaperDom({ style: true, video: false, videoSrc: "", bg: "none" }) === "none");
-check("classify: video but no src -> none", cdp.classifyWallpaperDom({ style: false, video: true, videoSrc: "", bg: "none" }) === "none");
-check("classify: video with src -> video", cdp.classifyWallpaperDom({ style: false, video: true, videoSrc: "file://x", bg: "none" }) === "video");
+// === classifyWallpaperDom (pure) — returns {mode, videoMuted} ===
+check("classify: video present -> video", cdp.classifyWallpaperDom({ style: true, video: true, videoSrc: "file://x", bg: "url(x)", videoMuted: true }).mode === "video");
+check("classify: video present -> videoMuted passthrough", cdp.classifyWallpaperDom({ style: true, video: true, videoSrc: "file://x", bg: "url(x)", videoMuted: true }).videoMuted === true);
+check("classify: video present -> videoMuted false passthrough", cdp.classifyWallpaperDom({ style: true, video: true, videoSrc: "file://x", bg: "url(x)", videoMuted: false }).videoMuted === false);
+check("classify: style + bg not none -> image", cdp.classifyWallpaperDom({ style: true, video: false, videoSrc: "", bg: "url(x)", videoMuted: null }).mode === "image");
+check("classify: image -> videoMuted null", cdp.classifyWallpaperDom({ style: true, video: false, videoSrc: "", bg: "url(x)", videoMuted: null }).videoMuted === null);
+check("classify: no style -> none", cdp.classifyWallpaperDom({ style: false, video: false, videoSrc: "", bg: "none", videoMuted: null }).mode === "none");
+check("classify: style but bg none -> none", cdp.classifyWallpaperDom({ style: true, video: false, videoSrc: "", bg: "none", videoMuted: null }).mode === "none");
+check("classify: video but no src -> none", cdp.classifyWallpaperDom({ style: false, video: true, videoSrc: "", bg: "none", videoMuted: true }).mode === "none");
+check("classify: video but no src -> videoMuted null", cdp.classifyWallpaperDom({ style: false, video: true, videoSrc: "", bg: "none", videoMuted: true }).videoMuted === null);
+check("classify: video with src -> video", cdp.classifyWallpaperDom({ style: false, video: true, videoSrc: "file://x", bg: "none", videoMuted: false }).mode === "video");
 
 // === listTargets via mock /json server ===
 const http = require("http");
