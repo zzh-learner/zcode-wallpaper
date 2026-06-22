@@ -30,6 +30,14 @@ function httpReq(method, url, body) {
     const redir = await httpReq("GET", base + "/control");
     check("/control -> 302", redir.status === 302);
     check("/control redirects to /control/", (redir.headers.location || "").indexOf("/control/") !== -1);
+    // bookmark: /control/go -> 302 /control/go.html (spec §3 server 改动)
+    fs.writeFileSync(path.join(root, "control", "go.html"), "<!doctype html><title>go</title>");
+    const goRedir = await httpReq("GET", base + "/control/go");
+    check("/control/go -> 302", goRedir.status === 302);
+    check("/control/go redirects to /control/go.html", (goRedir.headers.location || "").indexOf("/control/go.html") !== -1);
+    // /control/go.html served as static (existing /control/ branch covers it)
+    const goHtml = await httpReq("GET", base + "/control/go.html");
+    check("/control/go.html -> 200 html", goHtml.status === 200 && goHtml.body.indexOf("<title>") !== -1);
     // /control/ serves html
     const cc = await httpReq("GET", base + "/control/");
     check("/control/ returns html", cc.status === 200 && cc.body.indexOf("<title>") !== -1);
