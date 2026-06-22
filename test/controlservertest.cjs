@@ -81,6 +81,25 @@ function httpReq(method, url, body) {
     await new Promise(r => setTimeout(r, 300));
     const stop3 = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "stopRotate" }));
     check("stopRotate after video start -> 200", stop3.status === 200);
+
+    // === video mute/unmute actions (spec §4.5) ===
+    // 这些 action 走即时 CDP 写路径（非 spawn/jobId）。测试环境 9222 行为不可控
+    // （可能有别的服务监听），所以不假设 accepted 的值，只验证：
+    // ① action 被正确识别（不是 400 unknown）
+    // ② 响应是即时结构 {accepted, ...} 而非 {jobId}（证明走的是 mute 分支不是 spawn）
+    // ③ 不返回 500（CDP 失败应转 {accepted:false}）
+    const muteRes = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "muteVideo" }));
+    check("muteVideo -> 200 (not 400/500)", muteRes.status === 200);
+    var muteJson = JSON.parse(muteRes.body);
+    check("muteVideo -> has accepted field", typeof muteJson.accepted === "boolean");
+    check("muteVideo -> NO jobId (instant path, not spawn)", typeof muteJson.jobId === "undefined");
+
+    const unmuteRes = await httpReq("POST", base + "/api/action", JSON.stringify({ action: "unmuteVideo" }));
+    check("unmuteVideo -> 200 (not 400/500)", unmuteRes.status === 200);
+    var unmuteJson = JSON.parse(unmuteRes.body);
+    check("unmuteVideo -> has accepted field", typeof unmuteJson.accepted === "boolean");
+    check("unmuteVideo -> NO jobId (instant path, not spawn)", typeof unmuteJson.jobId === "undefined");
+
     // cleanup any .rotate.json the test wrote into tmp root
     try { require("fs").unlinkSync(path.join(root, ".rotate.json")); } catch (e) {}
   } finally { srv.close(); }
