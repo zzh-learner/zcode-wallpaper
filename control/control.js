@@ -20,6 +20,17 @@
       var cdpOk = !!(st.zcode && st.zcode.running);
       var cdpBtns = document.querySelectorAll('[data-action="injectImage"],[data-action="injectVideo"],[data-action="remove"]');
       for (var i = 0; i < cdpBtns.length; i++) cdpBtns[i].disabled = !cdpOk;
+      // mute/unmute buttons: only meaningful in video mode (spec §4.6).
+      // videoMuted === null (not video mode) -> both disabled.
+      // videoMuted === true  -> mute disabled, unmute enabled (CDP permitting).
+      // videoMuted === false -> mute enabled, unmute disabled.
+      var w = st.wallpaper || {};
+      var inVideo = (w.mode === "video");
+      var muted = (w.videoMuted === true);
+      var muteBtn = document.querySelector('[data-action="muteVideo"]');
+      var unmuteBtn = document.querySelector('[data-action="unmuteVideo"]');
+      if (muteBtn) muteBtn.disabled = !cdpOk || !inVideo || muted;
+      if (unmuteBtn) unmuteBtn.disabled = !cdpOk || !inVideo || !muted;
     }).catch(function () { /* server down; retry next tick */ });
     // refresh book list (for shelf add-region) + re-render shelf each poll
     fetch("/api/books").then(function (r) { return r.json(); }).then(function (books) {
@@ -56,7 +67,14 @@
     dispatchAction(finalAction, params).then(function (res) {
       if (res.status === 409) setJobMsg("忙，请等当前动作完成");
       else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""));
-      else { setJobMsg("已提交 (" + res.json.jobId + ")"); setTimeout(poll, 500); }
+      else {
+        // mute/unmute return {accepted, affected, muted} not {jobId}; show a
+        // sensible message for both shapes.
+        if (res.json.jobId) setJobMsg("已提交 (" + res.json.jobId + ")");
+        else if (typeof res.json.muted === "boolean") setJobMsg(res.json.muted ? "已静音（" + res.json.affected + "/" + res.json.total + " 窗口）" : "已取消静音（" + res.json.affected + "/" + res.json.total + " 窗口）");
+        else setJobMsg("已提交");
+        setTimeout(poll, 500);
+      }
     }).catch(function (err) { setJobMsg("错误: " + err.message); });
   });
 

@@ -78,5 +78,29 @@ const rotNull = sv.renderStatus({
 });
 check("render rotate null shows placeholder", rotNull.indexOf("—") !== -1);
 
+// === video wallpaper audio state display (spec §4.6) ===
+// video mode + unmuted -> shows 🔊 有声
+var stV = {
+  zcode: { running: true, debugPort: 9222, pageTargets: 1 },
+  wallpaper: { mode: "video", videoMuted: false, injectedWindows: 1, totalWindows: 1 },
+  transparent: { enabled: false }, reader: { running: true, port: 17890 },
+  resources: { images: 0, thumbs: 0, videos: 1, novels: 0, deps: { sharp: true } },
+  rotate: { running: false }, _meta: { probeErrors: [] },
+};
+var htmlV = sv.renderStatus(stV);
+check("status-view: video unmuted shows 🔊 有声", htmlV.indexOf("🔊 有声") !== -1);
+// video mode + muted -> shows 🔇 静音
+var stM = JSON.parse(JSON.stringify(stV));
+stM.wallpaper.videoMuted = true;
+var htmlM = sv.renderStatus(stM);
+check("status-view: video muted shows 🔇 静音", htmlM.indexOf("🔇 静音") !== -1);
+check("status-view: video muted does NOT show 🔊 有声", htmlM.indexOf("🔊 有声") === -1);
+// image mode -> no audio marker
+var stI = JSON.parse(JSON.stringify(stV));
+stI.wallpaper.mode = "image";
+stI.wallpaper.videoMuted = null;
+var htmlI = sv.renderStatus(stI);
+check("status-view: image mode no audio marker", htmlI.indexOf("🔊 有声") === -1 && htmlI.indexOf("🔇 静音") === -1);
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

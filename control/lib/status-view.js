@@ -13,6 +13,10 @@ function renderStatus(st) {
   var wHtml;
   if (w && w.mode && w.mode !== "none") {
     wHtml = esc(w.mode === "video" ? "视频壁纸" : "图片壁纸") + ' | 注入 ' + esc(w.injectedWindows) + '/' + esc(w.totalWindows);
+    // video mode: show audio state from DOM-truth videoMuted (spec §4.6)
+    if (w.mode === "video") {
+      wHtml += w.videoMuted ? ' | 🔇 静音' : ' | 🔊 有声';
+    }
   } else {
     wHtml = '<span class="muted">未注入</span>';
   }
