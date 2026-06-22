@@ -5,6 +5,10 @@ const http = require("http");
 const { WebSocketServer, WebSocket } = require("ws");
 const path = require("path");
 
+// Video element id, mirrored from inject.cjs so the video->image cleanup
+// assertion (test 5) can reference it without hardcoding the string.
+const { VIDEO_EL_ID } = require("../lib/inject.cjs");
+
 let lastInjectedCss = null;
 let injectedState = false; // tracks whether the mock "page" currently has the wallpaper style
 let removeCalled = false;
@@ -147,6 +151,24 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
   check(
     "video: mock did NOT receive image background-image url rule",
     lastExpression.indexOf("body { background-image: url(") === -1
+  );
+
+  // 5. VIDEO -> IMAGE switch (regression for the "still hear audio after
+  //    switching to image wallpaper" bug). After a video-mode inject, the
+  //    next image-mode inject's expression MUST also reference the video
+  //    element id (it removes any leftover <video> so its audio stops).
+  //    selftest covers the fake-DOM mechanics; this covers that inject.cjs
+  //    actually emits that expression end-to-end via the CDP mock.
+  lastExpression = ""; // reset so the next inject's expression is captured
+  await run("inject image after video via mock CDP", [], ["生效", "影响窗口 1"]);
+  check(
+    "video->image: image inject expression references video id (cleanup)",
+    lastExpression.indexOf(VIDEO_EL_ID) !== -1
+  );
+  // Sanity: this really was the image builder, not a stray video re-inject.
+  check(
+    "video->image: image inject did NOT create a new <video>",
+    lastExpression.indexOf("createElement('video')") === -1
   );
 
   console.log("\n[mock] " + pass + " passed, " + fail + " failed.");

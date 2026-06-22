@@ -401,14 +401,28 @@ server `/api/action muteVideo/unmuteVideo` → `lib/video-mute.cjs` 的 `setVide
 元素，新元素按 §"默认有声"机制 unmuted 试播。mute 状态不跨 inject 持久化（不做 localStorage
 偏好，YAGNI——声音是临时状态，不像书架/书签是用户数据）。
 
-### 两个 id，一个 --remove
+**视频→图片切换必须停掉旧视频的声音**（2026-06 真机抓到的 bug）：用户先注入视频壁纸
+（有声），再注入图片壁纸——画面切到图片了，**但旧视频的声音还在响**。根因：图片注入的
+`buildExpression("inject", ...)` 原本只清旧的 `<style>`，**不清旧的 `<video>` 元素**，所以旧视频
+留在 DOM 里继续播放（声画不同步）。修复：图片注入前也清掉 `VIDEO_EL_ID`，和 `--remove` /
+视频注入对称（见下面"三个清理点，一个目标"）。**单测当时漏了"视频→图片"这个 case**（只有
+图→图、video 注入、remove 清两个），所以 bug 溜进来了——`selftest.cjs` 的 Test 4e + `cdp-mock-test.cjs`
+的第 5 步是为此加的回归。教训 1 的 N 次重演：同型清理逻辑只在 2/3 路径上有 = 第三条能各自再坏。
+
+### 三个清理点，一个目标（原"两个 id，一个 --remove"）
 
 - `zcode-user-wallpaper` —— 图片模式注入的 `<style>`（视频模式也会注入它，放透明层 + 视频层 CSS）
 - `zcode-user-wallpaper-video` —— 视频模式注入的 `<video>` 元素
 
-**`--remove` 会同时清掉这两个 id**，不管之前注的是图还是视频。用户不用记自己用了哪个模式。
-（之前 remove 只查 style id；视频模式下用户 remove 会发现 style 没了但 video 还在——这个坑
-在 `selftest.cjs` 的 "remove cleans up BOTH" 测试里钉死了。）
+**三条清理路径都必须同时清掉这两个 id**（不管当前注的是图还是视频）：
+1. `--remove`（`buildExpression("remove", ...)`）—— 用户显式移除
+2. 视频注入（`buildVideoExpression`）—— 先清旧 style + 旧 video，再建新的
+3. **图片注入（`buildExpression("inject", ...)`）—— 先清旧 style + 旧 video，再建新 style**
+   （2026-06 补：原本只清 style，导致"视频→图片切换声音残留"，见上面"视频→图片切换"小节）
+
+用户不用记自己用了哪个模式、从哪个模式切过来。任一注入/移除路径都保证两条腿走路。
+（历史坑：remove 原本只查 style id → 视频模式 remove 时 style 没了但 video 还在；
+图片注入原本只清 style → 视频→图片切换时声音残留。两个坑都已用测试钉死，见下。）
 
 ### 视频从哪来（三种方式，优先级从高到低）
 
@@ -938,13 +952,17 @@ toplevel/零面积过滤、单候选自动选、多候选返回 `{ambiguous, can
 这和 probetest 同思路：钉死可纯函数化的那一层。
 
 `selftest.cjs` 现在还覆盖视频模式：`buildVideoExpression()` 的输出含 `<video>` 元素创建、
-src/autoplay/muted/loop/playsinline、`.play()` 兜底；以及 **`--remove` 同时清掉 `<style>` 和
-`<video>` 两个元素**（不管之前注的是图还是视频）。`listVideos` / `encodeFileUrl` 也有纯函数测试。
+src/autoplay/muted/loop/playsinline、`.play()` 兜底；**`--remove` 同时清掉 `<style>` 和
+`<video>` 两个元素**（不管之前注的是图还是视频，Test 4d）；**图片注入也清掉残留的 `<video>`**
+（Test 4e——钉死"视频→图片切换声音残留"的回归，见上面"视频→图片切换必须停掉旧视频的声音"）。
+`listVideos` / `encodeFileUrl` 也有纯函数测试。
 
 `cdp-mock-test.cjs` 现在多跑一条 `inject.cjs --video`：mock 不用改（视频表达式返回 `'ok'`、
 verify 沿用 `'effect'`/`'noeffect'` 哨兵），但会断言 mock **确实收到了 `<video>` 创建指令和
 文件 URL**，且**没收到图片模式的 `background-image: url(...)` 规则**——钉死 MODE 路由不会
-串台。注意：mock 对 verify 哨兵和 remove 动作的检测用的是**宽松匹配**（正则 `'present'\s*:\s*'gone'`、
+串台。**第 5 步验"视频→图片切换"**：视频注入后再跑一次图片注入，断言图片注入的表达式
+引用了 `VIDEO_EL_ID`（说明它在清旧 video），且没有 `createElement('video')`（没有误建新 video）。
+注意：mock 对 verify 哨兵和 remove 动作的检测用的是**宽松匹配**（正则 `'present'\s*:\s*'gone'`、
 子串 `'removed'`），不是逐字符匹配，因为表达式的内部空格/措辞是实现细节，不该让 mock 脆断。
 
 `cdp-retry-test.cjs` 是为第一次事故加的回归测试：mock 故意拒掉前 3 次 WS 握手，

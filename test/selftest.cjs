@@ -173,6 +173,27 @@ function check(name, cond) {
   check("remove: video gone", !document.getElementById(VIDEO_EL_ID));
 }
 
+// --- Test 4e: image inject after video cleans up the lingering <video> ---
+// Regression for the "video -> image, still hear audio" bug. The image inject
+// path must remove any prior <video> (with its audio), not just refresh the
+// <style>. --remove already did this; the image-inject path was the gap.
+{
+  const { document } = makeFakeDom();
+  // Start in video mode: both a <style> and a (playing, audible) <video>.
+  const videoFn = new Function("document", "return " + buildVideoExpression("body{a:1}", "file:///x/sound.mp4"));
+  videoFn(document);
+  check("video->image pre: style exists", !!document.getElementById(STYLE_ID));
+  check("video->image pre: video exists", !!document.getElementById(VIDEO_EL_ID));
+  // Now inject an image wallpaper (the bug scenario).
+  const imgFn = new Function("document", "return " + buildExpression("inject", "body{bg:url(x.jpg)}"));
+  const result = imgFn(document);
+  check("video->image: inject returns 'ok'", result === "ok");
+  // The new image <style> is present...
+  check("video->image: style present (refreshed)", !!document.getElementById(STYLE_ID));
+  // ...and the old <video> (carrying audio) is GONE. This is the fix.
+  check("video->image: old <video> removed (no leftover audio)", !document.getElementById(VIDEO_EL_ID));
+}
+
 // --- Test 5: inject.cjs pure functions (toFileUrl / listWallpapers / listVideos / pickRandom / encodeFileUrl) ---
 (function () {
   // toFileUrl
