@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>打开书签</title>
+<style>
+  /* A1 透明背景对齐 control.css（spec §7 透明背景）——内联精简版，不引整个 control.css 减少依赖。*/
+  html, body { margin: 0; height: 100%; background: transparent !important; color: #fff;
+    font-family: "Microsoft YaHei", system-ui, sans-serif; font-size: 14px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 48px 16px; text-align: center; }
+  h2 { font-size: 20px; margin: 0 0 8px 0; word-break: break-all; }
+  .url { color: #aaa; font-size: 13px; word-break: break-all; margin: 0 0 24px 0; }
+  .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  button { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px; padding: 8px 18px; cursor: pointer; font-size: 14px; }
+  button:hover { background: rgba(255,255,255,0.22); }
+  button.primary { background: rgba(66,165,245,0.3); border-color: rgba(66,165,245,0.6); }
+  .err { color: #ff8a80; }
+  .label { color: #ffb74d; margin: 0 0 16px 0; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="label" id="label">即将打开</p>
+    <h2 id="title"></h2>
+    <p class="url" id="url-display"></p>
+    <div class="actions" id="actions"></div>
+  </div>
+<script>
+(function () {
+  // === go.html 二次校验（双保险，spec §5 决策 4）===
+  // NOTE: 这段校验逻辑是 bookmark.js normalizeUrl 的复制品（go.html 自包含，不引外部 JS）。
+  // 改 bookmark.js 的协议白名单/补 http 规则时，必须同步改这里（教训 17 同型）。
+  function readQuery(key) {
+    var s = location.search.charAt(0) === "?" ? location.search.slice(1) : "";
+    var pairs = s.split("&");
+    for (var i = 0; i < pairs.length; i++) {
+      var eq = pairs[i].indexOf("=");
+      if (eq < 0) continue;
+      if (decodeURIComponent(pairs[i].slice(0, eq)) === key) return decodeURIComponent(pairs[i].slice(eq + 1));
+    }
+    return null;
+  }
+  function isAllowed(u) { return u.protocol === "http:" || u.protocol === "https:"; }
+  function validate(rawUrl) {
+    if (!rawUrl) return null;
+    try {
+      var p = new URL(rawUrl);
+      if (!isAllowed(p)) return null;
+      return p.href;
+    } catch (e) { return null; }
+  }
+
+  var rawUrl = readQuery("url");
+  var rawTitle = readQuery("title");
+  var validUrl = validate(rawUrl);
+  var titleEl = document.getElementById("title");
+  var urlEl = document.getElementById("url-display");
+  var actionsEl = document.getElementById("actions");
+  var labelEl = document.getElementById("label");
+
+  // 用 textContent 写入（防 XSS，spec §5 决策 3）——绝对不用 innerHTML 写用户数据
+  if (!validUrl) {
+    labelEl.textContent = "无效的书签链接";
+    labelEl.className = "err";
+    titleEl.textContent = "";
+    urlEl.textContent = rawUrl ? "（只支持 http/https 网址）" : "（缺少网址参数）";
+    var backBtn = document.createElement("button");
+    backBtn.textContent = "返回控制中心";
+    backBtn.onclick = function () { location.href = "/control/"; };
+    actionsEl.appendChild(backBtn);
+    return;
+  }
+
+  // 校验通过：显示 + 两按钮（立即前往 / 返回控制中心）
+  titleEl.textContent = rawTitle || validUrl;
+  urlEl.textContent = validUrl;
+  var goBtn = document.createElement("button");
+  goBtn.textContent = "立即前往";
+  goBtn.className = "primary";
+  goBtn.onclick = function () { location.href = validUrl; };
+  actionsEl.appendChild(goBtn);
+  var backBtn = document.createElement("button");
+  backBtn.textContent = "返回控制中心";
+  backBtn.onclick = function () { location.href = "/control/"; };
+  actionsEl.appendChild(backBtn);
+
+  // 不做自动跳转（spec §7 关键决定：bfcache 不可靠致后退死循环，砍掉倒计时）
+})();
+</script>
+</body>
+</html>

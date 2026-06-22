@@ -32,3 +32,17 @@ input { background: rgba(0, 0, 0, 0.3); color: #fff; border: 1px solid rgba(255,
 .shelf-section-title { font-size: 12px; color: #ffb74d; margin: 10px 0 4px 0; font-weight: bold;
   border-bottom: 1px solid rgba(255,183,77,0.3); padding-bottom: 2px; }
 .shelf-section-title:first-child { margin-top: 0; }
+
+/* ---- bookmark panel (spec §6) ---- */
+/* 复用书架的 .book/.book-open 布局（书架 CSS 用 #shelf-list 限定，书签需镜像一份到 #bookmark-list），
+   否则 span 没占满 + cursor 不对，点击 title 文字外的区域点不到（真机抓到的，教训 25 同型）。*/
+#bookmark-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex; align-items: center; justify-content: space-between; }
+#bookmark-list .book-open { cursor: pointer; flex: 1; }
+#bookmark-list .book-del { padding: 0 6px; margin: 0; font-size: 12px; line-height: 18px; }
+#bookmark-list .book-del:hover { background: rgba(255, 100, 100, 0.3); }
+.wide-input { width: auto !important; min-width: 80px; }
+.bookmark-add { margin-bottom: 6px; }
+#bookmark-list .book small { color: #999; display: block; font-size: 11px;
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.err { color: #ff8a80; }

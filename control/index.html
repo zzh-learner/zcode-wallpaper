@@ -27,8 +27,19 @@
     <span id="job-msg" class="muted"></span>
   </div>
   <div id="shelf-panel" class="panel"><h3>书架</h3><div id="shelf-list"></div></div>
+  <div id="bookmark-panel" class="panel">
+    <h3>书签</h3>
+    <div class="bookmark-add">
+      <input id="bm-title" type="text" placeholder="名称" class="wide-input" style="width:120px">
+      <input id="bm-url" type="text" placeholder="网址（如 github.com）" class="wide-input" style="width:220px">
+      <button data-action="addBookmark">添加</button>
+    </div>
+    <div id="bookmark-list"></div>
+    <span id="bm-msg" class="muted"></span>
+  </div>
   <script src="lib/status-view.js"></script>
   <script src="lib/shelf.js"></script>
+  <script src="lib/bookmark.js"></script>
   <script src="control.js"></script>
 </body>
 </html>

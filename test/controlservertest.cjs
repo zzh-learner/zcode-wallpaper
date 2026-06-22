@@ -30,6 +30,18 @@ function httpReq(method, url, body) {
     const redir = await httpReq("GET", base + "/control");
     check("/control -> 302", redir.status === 302);
     check("/control redirects to /control/", (redir.headers.location || "").indexOf("/control/") !== -1);
+    // bookmark: /control/go -> 302 /control/go.html (spec §3 server 改动)
+    fs.writeFileSync(path.join(root, "control", "go.html"), "<!doctype html><title>go</title>");
+    const goRedir = await httpReq("GET", base + "/control/go");
+    check("/control/go -> 302", goRedir.status === 302);
+    check("/control/go redirects to /control/go.html", (goRedir.headers.location || "").indexOf("/control/go.html") !== -1);
+    // /control/go.html served as static (existing /control/ branch covers it).
+    // MUST assert Content-Type text/html — 真机抓到 guessMime 漏 .html 致 octet-stream,
+    // webview 把 go.html 当下载 (用户报 "点书签让我保存 go.html"). 只验 body 有 <title>
+    // 抓不到 MIME 错 (内容对但浏览器下载). 教训 12: 跨进程胶水 (server MIME ↔ 浏览器) 必验响应头.
+    const goHtml = await httpReq("GET", base + "/control/go.html");
+    check("/control/go.html -> 200 html", goHtml.status === 200 && goHtml.body.indexOf("<title>") !== -1);
+    check("/control/go.html -> Content-Type text/html", (goHtml.headers["content-type"] || "").indexOf("text/html") !== -1);
     // /control/ serves html
     const cc = await httpReq("GET", base + "/control/");
     check("/control/ returns html", cc.status === 200 && cc.body.indexOf("<title>") !== -1);
