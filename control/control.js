@@ -18,6 +18,11 @@
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (st) {
       setStatusHtml(window.__ccStatusView.renderStatus(st));
       var cdpOk = !!(st.zcode && st.zcode.running);
+      // webview _blank fix availability hint (spec §7 已知遗留):
+      // blankfix needs debug port. When port closed (cdpOk=false), warn user
+      // that _blank links won't be fixed.
+      var warnEl = document.getElementById("bm-port-warn");
+      if (warnEl) warnEl.style.display = cdpOk ? "none" : "block";
       var cdpBtns = document.querySelectorAll('[data-action="injectImage"],[data-action="injectVideo"],[data-action="remove"]');
       for (var i = 0; i < cdpBtns.length; i++) cdpBtns[i].disabled = !cdpOk;
       // mute/unmute buttons: only meaningful in video mode (spec §4.6).
