@@ -71,5 +71,100 @@ check("SOURCE: contains addEventListener('click'", src.indexOf("addEventListener
 check("SOURCE: contains childList:true,subtree:true", src.indexOf("childList:true,subtree:true") !== -1);
 check("SOURCE: is IIFE", /^\(function\(\)\{[\s\S]*\}\)\(\);?\s*$/.test(src.trim()));
 
+// === SOURCE 脚本语义测试 (spec §8): 用手写 fake DOM 跑 SOURCE ===
+// 不引入 jsdom (YAGNI). 手写最小 fake document/window 满足 SOURCE 需求。
+
+function makeFakeDom(initialBlanks) {
+  var observerCbs = [];
+  var clickListeners = [];
+  // create minimal <a> nodes
+  var anchors = initialBlanks.map(function (i) {
+    return {
+      tagName: "A",
+      target: "_blank",
+      _attrs: { target: "_blank" },
+      getAttribute: function (n) { return this._attrs[n] !== undefined ? this._attrs[n] : null; },
+      removeAttribute: function (n) { delete this._attrs[n]; this.target = this._attrs.target || ""; },
+      closest: function () { return this; }
+    };
+  });
+  var body = {
+    querySelectorAll: function (sel) {
+      // only support a[target="_blank"]
+      return anchors.filter(function (a) { return a.getAttribute("target") === "_blank"; });
+    }
+  };
+  var fakeDoc = {
+    documentElement: body,
+    querySelectorAll: function (sel) { return body.querySelectorAll(sel); },
+    addEventListener: function (ev, cb, opts) { if (ev === "click") clickListeners.push(cb); }
+  };
+  // stub MutationObserver
+  var MutationObserver = function (cb) {
+    observerCbs.push(cb);
+    return { observe: function (target, opts) {} };
+  };
+  // stub window (the IIFE assigns to window.__zzBlankFix etc)
+  var win = {
+    __zzBlankFix: undefined,
+    document: fakeDoc,
+    MutationObserver: MutationObserver
+  };
+  return {
+    win: win,
+    doc: fakeDoc,
+    getAnchors: function () { return anchors; },
+    fireMutation: function (addedNodes) {
+      observerCbs.forEach(function (cb) { cb([{ addedNodes: addedNodes }]); });
+    },
+    fireClick: function (target) {
+      // fake event with target supporting closest('a')
+      var ev = { target: target };
+      clickListeners.forEach(function (cb) { try { cb(ev); } catch (e) {} });
+    },
+    observerInstalled: function () { return observerCbs.length > 0; }
+  };
+}
+
+// 场景 1: 预置 <a target=_blank> 被剥掉
+(function () {
+  var dom = makeFakeDom([{}, {}, {}]);  // 3 blank anchors
+  var fn = new Function("window", "document", "MutationObserver", bf.WEBVIEW_BLANKFIX_SOURCE);
+  fn(dom.win, dom.doc, dom.win.MutationObserver);
+  var remaining = dom.getAnchors().filter(function (a) { return a.getAttribute("target") === "_blank"; });
+  check("semantics: 3 pre-existing blanks all stripped", remaining.length === 0);
+})();
+
+// 场景 2: 动态 append 的 _blank 链接被 observer 剥掉
+(function () {
+  var dom = makeFakeDom([]);
+  var fn = new Function("window", "document", "MutationObserver", bf.WEBVIEW_BLANKFIX_SOURCE);
+  fn(dom.win, dom.doc, dom.win.MutationObserver);
+  check("semantics: observer installed", dom.observerInstalled());
+  // simulate dynamically-added anchor (nodeType:1 = ELEMENT_NODE, like real DOM)
+  var newAnchor = {
+    tagName: "A", nodeType: 1, target: "_blank",
+    _attrs: { target: "_blank" },
+    getAttribute: function (n) { return this._attrs[n] !== undefined ? this._attrs[n] : null; },
+    removeAttribute: function (n) { delete this._attrs[n]; this.target = this._attrs.target || ""; },
+    querySelectorAll: function () { return []; },
+    closest: function () { return this; }
+  };
+  dom.fireMutation([newAnchor]);
+  check("semantics: dynamically-added blank stripped by observer", newAnchor.getAttribute("target") === null);
+})();
+
+// 场景 3: 幂等 — 重跑 SOURCE 不报错、不重复装 observer
+(function () {
+  var dom = makeFakeDom([]);
+  var fn = new Function("window", "document", "MutationObserver", bf.WEBVIEW_BLANKFIX_SOURCE);
+  fn(dom.win, dom.doc, dom.win.MutationObserver);
+  // run again (bfcache/SPA route re-trigger)
+  var threw = false;
+  try { fn(dom.win, dom.doc, dom.win.MutationObserver); } catch (e) { threw = true; }
+  check("semantics: re-run does not throw", threw === false);
+  check("semantics: idempotency guard set after first run", dom.win.__zzBlankFix === true);
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail > 0 ? 1 : 0);
