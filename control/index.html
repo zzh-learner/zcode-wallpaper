@@ -23,10 +23,12 @@
       <button data-action="startRotate">开始轮播</button>
       <button data-action="stopRotate">停止轮播</button>
     </fieldset>
-    <button id="open-reader">打开阅读器</button>
     <span id="job-msg" class="muted"></span>
   </div>
-  <div id="shelf-panel" class="panel"><h3>书架</h3><div id="shelf-list"></div></div>
+  <div id="shelf-panel" class="panel">
+    <div class="shelf-head"><h3>书架</h3><button id="open-reader" class="link-btn" title="去阅读界面">打开阅读器 →</button></div>
+    <div id="shelf-list"></div>
+  </div>
   <div id="bookmark-panel" class="panel">
     <h3>书签</h3>
     <div class="bookmark-add">

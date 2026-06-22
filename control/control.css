@@ -12,6 +12,12 @@ html, body { margin: 0; height: 100%; background: transparent !important; color:
 .panel { background: rgba(20, 20, 24, 0.25); border-radius: 8px; padding: 10px 12px; margin: 8px;
   backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.12); }
 h3 { margin: 0 0 6px 0; font-size: 14px; }
+/* 书架标题行：h3 + 打开阅读器链接按钮横排 (打开阅读器从 #actions 移到书架, 语义更近) */
+.shelf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.shelf-head h3 { margin: 0; }
+.link-btn { background: transparent; border: none; color: #66bb6a; padding: 0 4px; margin: 0;
+  font-size: 12px; text-decoration: underline; cursor: pointer; }
+.link-btn:hover { background: transparent; color: #81c784; }
 .st { padding: 3px 0; }
 button { background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 4px; padding: 4px 10px; cursor: pointer; margin: 2px; }
