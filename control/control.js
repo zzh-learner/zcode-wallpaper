@@ -26,6 +26,7 @@
       cachedBooks = books;
     }).catch(function () { /* keep last cached */ }).then(function () {
       if (window.__ccShelf) renderShelf();
+      if (window.__ccBookmark) renderBookmarks();
     });
   }
 
@@ -125,12 +126,79 @@
     }
   });
 
+  // ---- bookmark panel (spec §6) ----
+  function renderBookmarks() {
+    var el = document.getElementById("bookmark-list");
+    if (!el || !window.__ccBookmark) return;
+    var list = window.__ccBookmark.getBookmarks();
+    var html = "";
+    if (!list.length) {
+      html = '<div class="muted">还没有书签，在上方添加（名称 + 网址）</div>';
+    } else {
+      list.forEach(function (b) {
+        html += '<div class="book">' +
+          '<span class="book-open" data-go="' + encodeURIComponent(window.__ccBookmark.buildGoUrl(b.url, b.title)) + '" title="' + esc(b.url) + '">' +
+          esc(b.title) + ' <small>' + esc(b.url) + '</small></span>' +
+          '<button class="book-del" data-bmdel="' + encodeURIComponent(b.id) + '" title="删除书签">✕</button>' +
+          '</div>';
+      });
+    }
+    el.innerHTML = html;
+  }
+
+  function setBmMsg(text, isErr) {
+    var el = document.getElementById("bm-msg");
+    if (!el) return;
+    el.textContent = text;
+    el.className = isErr ? "err" : "muted";
+    if (isErr) setTimeout(function () { if (el.textContent === text) { el.textContent = ""; el.className = "muted"; } }, 2000);
+  }
+
+  function addBookmarkFromForm() {
+    var titleInput = document.getElementById("bm-title");
+    var urlInput = document.getElementById("bm-url");
+    var titleVal = titleInput.value.trim();
+    var urlVal = urlInput.value.trim();
+    var v = window.__ccBookmark.normalizeUrl(urlVal);
+    if (!v.ok) { setBmMsg(v.error || "URL 无效", true); return; }
+    var entry = window.__ccBookmark.makeBookmarkEntry({ title: titleVal, url: v.url });
+    if (!window.__ccBookmark.addBookmark(entry)) { setBmMsg("保存失败（存储不可用）", true); return; }
+    titleInput.value = ""; urlInput.value = "";
+    renderBookmarks();
+    setBmMsg("已添加", false);
+    setTimeout(function () { var el = document.getElementById("bm-msg"); if (el) el.textContent = ""; }, 1000);
+  }
+
+  // bookmark-panel event delegation: add button / click-go / delete / Enter key
+  document.getElementById("bookmark-panel").addEventListener("click", function (e) {
+    var t = e.target;
+    var action = t.getAttribute && t.getAttribute("data-action");
+    var goUrl = t.getAttribute && t.getAttribute("data-go");
+    var delId = t.getAttribute && t.getAttribute("data-bmdel");
+    if (action === "addBookmark") {
+      addBookmarkFromForm();
+    } else if (goUrl) {
+      location.href = decodeURIComponent(goUrl);
+    } else if (delId) {
+      window.__ccBookmark.removeBookmark(decodeURIComponent(delId));
+      renderBookmarks();
+    }
+  });
+  // Enter submits (inputs not in a <form> to avoid page-reload; spec §6)
+  ["bm-title", "bm-url"].forEach(function (id) {
+    var inp = document.getElementById(id);
+    if (inp) inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); addBookmarkFromForm(); }
+    });
+  });
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
       return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c];
     });
   }
 
+  if (window.__ccBookmark) renderBookmarks();
   setInterval(poll, POLL_MS);
   poll();
 })();
