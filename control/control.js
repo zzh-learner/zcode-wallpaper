@@ -169,19 +169,26 @@
     setTimeout(function () { var el = document.getElementById("bm-msg"); if (el) el.textContent = ""; }, 1000);
   }
 
-  // bookmark-panel event delegation: add button / click-go / delete / Enter key
+  // bookmark-panel event delegation: add button / click-go / delete / Enter key.
+  // closest-ancestor walk: clicking <small> (URL line) inside <span data-go> must
+  // still fire the go — e.target may be a child, walk up to find data-go/data-bmdel
+  // (教训 25 同型: 真机抓到的事件 target 边界, 单测验不到).
   document.getElementById("bookmark-panel").addEventListener("click", function (e) {
     var t = e.target;
-    var action = t.getAttribute && t.getAttribute("data-action");
-    var goUrl = t.getAttribute && t.getAttribute("data-go");
-    var delId = t.getAttribute && t.getAttribute("data-bmdel");
-    if (action === "addBookmark") {
-      addBookmarkFromForm();
-    } else if (goUrl) {
-      location.href = decodeURIComponent(goUrl);
-    } else if (delId) {
-      window.__ccBookmark.removeBookmark(decodeURIComponent(delId));
-      renderBookmarks();
+    // walk up to the element carrying a data-* attr (or the panel boundary)
+    var node = t;
+    while (node && node !== this) {
+      var action = node.getAttribute && node.getAttribute("data-action");
+      var goUrl = node.getAttribute && node.getAttribute("data-go");
+      var delId = node.getAttribute && node.getAttribute("data-bmdel");
+      if (action === "addBookmark") { addBookmarkFromForm(); return; }
+      if (goUrl) { location.href = decodeURIComponent(goUrl); return; }
+      if (delId) {
+        window.__ccBookmark.removeBookmark(decodeURIComponent(delId));
+        renderBookmarks();
+        return;
+      }
+      node = node.parentNode;
     }
   });
   // Enter submits (inputs not in a <form> to avoid page-reload; spec §6)
