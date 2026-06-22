@@ -19,7 +19,7 @@
     "setup": "node lib/setup.cjs",
     "reader": "node lib/reader-server.cjs",
     "control": "node lib/control-server.cjs",
-    "test": "node test/selftest.cjs && node test/cdp-mock-test.cjs && node test/cdp-retry-test.cjs && node test/cdptest.cjs && node test/setuptest.cjs && node test/resizetest.cjs && node test/probetest.cjs && node test/menutest.cjs && node test/transparenttest.cjs && node test/readertoctest.cjs && node test/readercodetest.cjs && node test/readercodetestweb.cjs && node test/readertocwebtest.cjs && node test/readerprogresstest.cjs && node test/readerservertest.cjs && node test/bookroutertest.cjs && node test/rotatetest.cjs && node test/statustest.cjs && node test/controlservertest.cjs && node test/statusviewtest.cjs && node test/shelftest.cjs && node test/bookmarktest.cjs"
+    "test": "node test/selftest.cjs && node test/cdp-mock-test.cjs && node test/cdp-retry-test.cjs && node test/cdptest.cjs && node test/setuptest.cjs && node test/resizetest.cjs && node test/probetest.cjs && node test/menutest.cjs && node test/transparenttest.cjs && node test/readertoctest.cjs && node test/readercodetest.cjs && node test/readercodetestweb.cjs && node test/readertocwebtest.cjs && node test/readerprogresstest.cjs && node test/readerservertest.cjs && node test/bookroutertest.cjs && node test/rotatetest.cjs && node test/statustest.cjs && node test/controlservertest.cjs && node test/statusviewtest.cjs && node test/shelftest.cjs && node test/videomutetest.cjs && node test/bookmarktest.cjs"
   },
   "dependencies": {
     "sharp": "^0.35.1",
