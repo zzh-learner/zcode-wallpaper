@@ -127,16 +127,30 @@ function check(name, cond) {
   check("video: <video> element present", !!video);
   check("video: src attribute set to chosen url", video && video.getAttribute("src") === url);
   check("video: autoplay set", video && video.getAttribute("autoplay") === "");
-  check("video: muted set", video && video.getAttribute("muted") === "");
   check("video: loop set", video && video.getAttribute("loop") === "");
   check("video: playsinline set", video && video.getAttribute("playsinline") === "");
 }
 
-// --- Test 4c: video expression contains the expected markers (string-level) ---
+// --- Test 4c: video expression default mode = unmuted + auto-fallback ---
 {
   const expr = buildVideoExpression("body{a:1}", "file:///x/y.mp4");
-  // The .play() fallback call must be present (autoplay alone is not 100%).
-  check("video expr contains .play() fallback", expr.indexOf(".play()") !== -1);
+  // Default mode must NOT force muted at top level. The auto-fallback
+  // (play().catch -> set muted + replay) handles the no-flag case. So
+  // `v.muted=true` should appear ONLY inside the catch/fallback paths, never
+  // as an unconditional top-level statement. Count occurrences: exactly 2
+  // (one in the async .catch callback, one in the sync catch(e) block).
+  var muteCount = (expr.match(/v\.muted=true/g) || []).length;
+  check("video default: v.muted=true only in fallback (exactly 2x)", muteCount === 2);
+  // Sanity: the two occurrences must both be inside catch/try blocks, not at
+  // top level. Verify by checking the substring BEFORE the first v.muted=true
+  // ends with a function/catch opener (i.e. muted is inside a callback).
+  var firstIdx = expr.indexOf("v.muted=true");
+  var before = expr.slice(0, firstIdx);
+  check("video default: first v.muted=true is inside a catch callback", /[(){]\s*$/.test(before));
+  // The .play() call must be present, and its .catch must re-mute + replay
+  // (auto-degrade when flag not effective: AGENTS.md 教训 13/21).
+  check("video default: contains .play()", expr.indexOf(".play()") !== -1);
+  check("video default: catch path re-mutes", expr.indexOf("v.muted=true") !== -1);
   // The video file URL must survive JSON.stringify intact.
   check("video expr contains the file url", expr.indexOf("file:///x/y.mp4") !== -1);
   // createElement('video') — proves it's a real DOM element, not CSS background.
