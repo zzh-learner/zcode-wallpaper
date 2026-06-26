@@ -450,6 +450,21 @@ server `/api/action muteVideo/unmuteVideo` → `lib/video-mute.cjs` 的 `setVide
 `resize.cjs` **不碰视频**。Electron 直接播原文件，mp4 多大就吃多大。`wallpapers-video/` 里的样本
 建议挑体积小的（本项目测试用的是 ~80-110MB 的短 clip）。
 
+### 支持的容器格式（真机验过，2026-06）
+
+- **`.mp4`** —— 最稳，H.264 + AAC 是 Chromium 原生支持，无脑选。
+- **`.mov`** —— 实测**完全可播**（音画都有，可直接当视频壁纸用）。
+  ⚠️ **别拿"Chromium 在 Windows 上播 mov 靠系统 codec、Electron 默认不带"的常识去推测**——
+  那个推测在当前 ZCode（Electron）上**被真机证伪了**（教训 10/21：理论打架信事实、"应该能 X"
+  是假设）。用户把一批 iPhone 拍的 `.mov` 拷进 `wallpapers-video/`，直接就能播。
+- **`.livp`（Apple Live Photo）—— 不能直接用**，但可拆。它是 zip 容器，内部装一张 JPEG + 一段 MOV
+  （`unzip -l xxx.livp` 能看到 `IMG_xxxx.JPG.jpeg` + `IMG_xxxx.JPG.mov` 两项）。本项目两个子系统都
+  不认 `.livp` 这个扩展名（`inject.cjs` 的 `IMAGE_EXTS`/视频挑选都不含它），直接拷进来不会被选到。
+  想用 livp 素材得**先解包**：JPEG 进 `wallpapers/`（走 resize），MOV 进 `wallpapers-video/`
+  （mov 实测可播）。解包命令见仓库外部素材处理脚本（或 `unzip -o "x.livp" -d <out>` 后手动分类）。
+- **`.mkv`/`.avi`/`.webm` 等** —— 没真机验过，**用前必须 `scripts/inspect` + 人眼确认**能播再批量塞。
+  别假设"mp4 行其它也行"（教训 28 同型：CDP/webview 支持是子集，视频容器支持同理，逐个验）。
+
 ### 已知遗留（和图片模式同款）
 
 侧边栏那块实色深色背景是 ZCode 框架硬画的，不走任何我们覆盖的变量/Tailwind 类，
