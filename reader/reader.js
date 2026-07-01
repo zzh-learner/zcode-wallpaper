@@ -130,16 +130,53 @@
     });
   }
 
+  // Renders the chapter DOM by format dispatch. Returns the visible container.
+  // txt -> the existing #chapter-content article (paragraph list, unchanged).
+  // epub -> the #epub-content div (sanitized HTML fragment + cssHrefs links).
+  // The body.epub-mode class toggles which container is visible (CSS hides the
+  // other) so stale content from the prior format can't show through.
+  function showChapterNode(ch) {
+    if (ch.format === "epub") {
+      document.body.classList.add("epub-mode");
+      var ec = $("epub-content");
+      ec.removeAttribute("hidden"); // un-hide the container (initially hidden in HTML)
+      ec.innerHTML = "";
+      // title
+      var h = document.createElement("h2"); h.textContent = ch.title; ec.appendChild(h);
+      // cssHrefs are absolute /api/book/.../asset URLs. Link-tagged directly here;
+      // they are UNSCOPED (could leak to reader UI) — Task 10 replaces this with
+      // fetched + scopeCss'd styles. Known transient state.
+      var styleWrap = document.createElement("div");
+      (ch.cssHrefs || []).forEach(function (href) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet"; link.type = "text/css"; link.href = href;
+        styleWrap.appendChild(link);
+      });
+      // epub HTML body fragment (already sanitized + src-rewritten server-side)
+      var body = document.createElement("div");
+      body.innerHTML = ch.html;
+      ec.appendChild(styleWrap);
+      ec.appendChild(body);
+      return ec;
+    } else {
+      document.body.classList.remove("epub-mode");
+      var art = $("chapter-content");
+      art.innerHTML = "";
+      var h2 = document.createElement("h2"); h2.textContent = ch.title; art.appendChild(h2);
+      (ch.paragraphs || []).forEach(function (p) {
+        var el = document.createElement("p"); el.textContent = p; art.appendChild(el);
+      });
+      return art;
+    }
+  }
+
   async function showChapter(n, restoreRatio) {
     if (!currentBook) return;
     var ch = await currentBook.getChapter(n);
     if (!ch) { showErr("无此章"); return; }
     currentChapter = n;
     $("chap-name").textContent = ch.title;
-    var art = $("chapter-content");
-    art.innerHTML = "";
-    var h = document.createElement("h2"); h.textContent = ch.title; art.appendChild(h);
-    ch.paragraphs.forEach(function (p) { var el = document.createElement("p"); el.textContent = p; art.appendChild(el); });
+    var node = showChapterNode(ch);
     // highlight current in toc
     [].forEach.call(document.querySelectorAll("#toc-list .chap"), function (el) {
       el.classList.toggle("current", parseInt(el.dataset.idx, 10) === n);
@@ -192,7 +229,7 @@
       e.preventDefault(); document.body.classList.remove("dragging");
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (!f) return;
-      if (!/\.txt$/i.test(f.name)) { showErr("仅支持 .txt"); return; }
+      if (!/\.txt$/i.test(f.name)) { showErr("拖拽仅支持 .txt。epub 请放入 novels/ 由服务加载。"); return; }
       clearErr();
       try {
         var buf = await f.arrayBuffer();
