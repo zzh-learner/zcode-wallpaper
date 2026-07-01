@@ -2,6 +2,12 @@
 // Run: node test/fixtures/make-epub.cjs
 // Produces: normal.epub (2 chapters, CSS, image, NCX+nav, XSS probes).
 // Fixtures are gitignored — regenerate when needed.
+//
+// LAYOUT (subdirectory-based, mirrors real-world epubs):
+//   XHTML in OEBPS/Text/, images in OEBPS/Images/, CSS in OEBPS/Styles/, OPF at OEBPS/.
+// This forces XHTML src/href to carry "../" (relative to the XHTML's own directory),
+// which is the case that breaks if the asset whitelist keys on manifest hrefs instead
+// of absolute zip paths. A flat fixture masks that bug.
 const JSZip = require("jszip");
 const fs = require("fs");
 const path = require("path");
@@ -15,27 +21,27 @@ function makeNormalEpub() {
   <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
 </container>`);
   const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-  zip.file("OEBPS/images/red.png", PNG);
-  zip.file("OEBPS/styles/main.css",
+  zip.file("OEBPS/Images/red.png", PNG);
+  zip.file("OEBPS/Styles/main.css",
 `body { font-family: serif; }
 p.chapter-text { text-indent: 2em; color: #333; }
 @import url("should-be-stripped.css");`);
-  zip.file("OEBPS/chap1.xhtml",
+  zip.file("OEBPS/Text/chap1.xhtml",
 `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>Chapter 1</title>
-<link rel="stylesheet" type="text/css" href="styles/main.css"/></head>
+<link rel="stylesheet" type="text/css" href="../Styles/main.css"/></head>
 <body>
 <h1>第一章 开始</h1>
 <p class="chapter-text">这是第一段正文。</p>
 <p class="chapter-text">这是第二段正文。</p>
-<p><img src="images/red.png" alt="红点"/></p>
+<p><img src="../Images/red.png" alt="红点"/></p>
 <script>alert('xss-script')</script>
 <img src="x" onerror="alert('xss-onerror')"/>
 <a href="javascript:alert('xss-js')">evil link</a>
 </body></html>`);
-  zip.file("OEBPS/chap2.xhtml",
+  zip.file("OEBPS/Text/chap2.xhtml",
 `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -50,10 +56,10 @@ p.chapter-text { text-indent: 2em; color: #333; }
 <dc:language>zh</dc:language><dc:identifier id="bookid">spike-001</dc:identifier>
 </metadata>
 <manifest>
-<item id="chap1" href="chap1.xhtml" media-type="application/xhtml+xml"/>
-<item id="chap2" href="chap2.xhtml" media-type="application/xhtml+xml"/>
-<item id="css" href="styles/main.css" media-type="text/css"/>
-<item id="img" href="images/red.png" media-type="image/png"/>
+<item id="chap1" href="Text/chap1.xhtml" media-type="application/xhtml+xml"/>
+<item id="chap2" href="Text/chap2.xhtml" media-type="application/xhtml+xml"/>
+<item id="css" href="Styles/main.css" media-type="text/css"/>
+<item id="img" href="Images/red.png" media-type="image/png"/>
 <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
 </manifest>
@@ -65,8 +71,8 @@ p.chapter-text { text-indent: 2em; color: #333; }
 <head><meta name="dtb:uid" content="spike-001"/></head>
 <docTitle><text>Spike Test Book</text></docTitle>
 <navMap>
-<navPoint id="c1" playOrder="1"><navLabel><text>第一章 开始</text></navLabel><content src="chap1.xhtml"/></navPoint>
-<navPoint id="c2" playOrder="2"><navLabel><text>第二章 继续</text></navLabel><content src="chap2.xhtml"/></navPoint>
+<navPoint id="c1" playOrder="1"><navLabel><text>第一章 开始</text></navLabel><content src="Text/chap1.xhtml"/></navPoint>
+<navPoint id="c2" playOrder="2"><navLabel><text>第二章 继续</text></navLabel><content src="Text/chap2.xhtml"/></navPoint>
 </navMap></ncx>`);
   zip.file("OEBPS/nav.xhtml",
 `<?xml version="1.0" encoding="UTF-8"?>
@@ -74,8 +80,8 @@ p.chapter-text { text-indent: 2em; color: #333; }
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head><title>Table of Contents</title></head>
 <body><nav epub:type="toc"><ol>
-<li><a href="chap1.xhtml">第一章 开始</a></li>
-<li><a href="chap2.xhtml">第二章 继续</a></li>
+<li><a href="Text/chap1.xhtml">第一章 开始</a></li>
+<li><a href="Text/chap2.xhtml">第二章 继续</a></li>
 </ol></nav></body></html>`);
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }

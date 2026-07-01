@@ -93,8 +93,25 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     // XSS stripped at the endpoint (not just in pure fn)
     check("epub chapter html XSS-stripped", !epubCh.html.includes("<script") && !epubCh.html.includes("onerror"));
 
-    // asset endpoint: whitelisted CSS returns text/css + body
-    const cssRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("styles/main.css"));
+    // END-TO-END: the fixture's chap1.xhtml (in OEBPS/Text/) references the image
+    // with a RELATIVE src "../Images/red.png". After sanitizeChapterXhtml rewrites
+    // it against the chapter's zip dir, the src must point at the RESOLVED absolute
+    // zip path OEBPS/Images/red.png (this is the bug fix — a flat fixture masked it).
+    const imgSrcMatch = epubCh.html.match(/src="(\/api\/book\/[^"]*\/asset\?href=([^"]+))"/);
+    check("chapter html img src rewritten + resolved to absolute zip path",
+      !!imgSrcMatch && decodeURIComponent(imgSrcMatch[2]) === "OEBPS/Images/red.png");
+    // And that resolved URL must actually serve the image (200 + png bytes).
+    if (imgSrcMatch) {
+      const resolvedImgRes = await fetch(base + imgSrcMatch[1]);
+      check("resolved img src serves 200 + png", resolvedImgRes.status === 200
+        && resolvedImgRes.headers.get("content-type").includes("image/png")
+        && (await resolvedImgRes.arrayBuffer()).byteLength > 0);
+    }
+
+    // asset endpoint: whitelisted CSS returns text/css + body.
+    // Whitelist keys are now ABSOLUTE zip paths (OEBPS/Styles/main.css), matching
+    // what rewriteRef produces — not the OPF-relative manifest href.
+    const cssRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("OEBPS/Styles/main.css"));
     check("asset CSS status 200", cssRes.status === 200);
     check("asset CSS content-type", cssRes.headers.get("content-type").includes("text/css"));
     const cssBody = await cssRes.text();
@@ -104,14 +121,14 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     check("asset CSS body @import stripped", !cssBody.includes("@import"));
     check("asset CSS body @import probe gone", !cssBody.includes("should-be-stripped"));
 
-    // asset endpoint: image returns image/png
-    const imgRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("images/red.png"));
+    // asset endpoint: image returns image/png (queried by absolute zip path key)
+    const imgRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("OEBPS/Images/red.png"));
     check("asset image status 200", imgRes.status === 200);
     check("asset image content-type", imgRes.headers.get("content-type").includes("image/png"));
     const imgBuf = Buffer.from(await imgRes.arrayBuffer());
     check("asset image bytes > 0", imgBuf.length > 0);
 
-    // asset endpoint: path traversal -> 404
+    // asset endpoint: path traversal -> 404 (resolves to "etc/passwd", not in whitelist)
     const evilRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("../../etc/passwd"));
     check("asset path traversal 404", evilRes.status === 404);
     const evilEnc = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("images%2F..%2F..%2Fpasswd"));

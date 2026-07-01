@@ -176,5 +176,33 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("rewritten href is encoded", out.includes("images%2Fred.png"));
 })();
 
+// --- sanitizeChapterXhtml: base-path resolution (the subdirectory fix) ---
+// Real epubs put XHTML in Text/ and assets in Images/, so src carries "../".
+// rewriteRef must resolve the relative src against the chapter's base zip path
+// to an absolute zip path, which then matches the asset whitelist key.
+(function(){
+  const { sanitizeChapterXhtml } = lib;
+  const raw = `<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<img src="../Images/red.png" alt="r"/>
+<a href="../Images/red.png">link to image</a>
+<img src="Images/same-dir.png"/>
+</body></html>`;
+  // Chapter XHTML lives at OEBPS/Text/chap1.xhtml; "../Images/red.png" resolves to
+  // OEBPS/Images/red.png; "Images/same-dir.png" (no ../) resolves to OEBPS/Text/Images/same-dir.png.
+  const out = sanitizeChapterXhtml(raw, "b123", "OEBPS/Text/chap1.xhtml");
+  // ../Images/red.png -> OEBPS/Images/red.png
+  check("../ resolves against chapter dir", out.includes("OEBPS%2FImages%2Fred.png"));
+  check("no raw ../Images/red.png left", !out.includes("../Images/red.png"));
+  // Images/same-dir.png (relative, no ../) -> OEBPS/Text/Images/same-dir.png
+  check("plain relative resolves under chapter dir", out.includes("OEBPS%2FText%2FImages%2Fsame-dir.png"));
+  // traversal clamps at zip root (../../etc/passwd -> etc/passwd, which then fails whitelist elsewhere)
+  const evil = sanitizeChapterXhtml(`<img src="../../etc/passwd"/>`, "b123", "OEBPS/Text/chap1.xhtml");
+  check("traversal clamps at zip root (no leading .., no absolute fs path)",
+    !evil.includes("..") && evil.includes("etc%2Fpasswd"));
+  // base default "" keeps backward-compat: "images/red.png" stays "images/red.png"
+  const noBase = sanitizeChapterXhtml(`<img src="images/red.png"/>`, "b123");
+  check("default base keeps flat src as-is", noBase.includes("images%2Fred.png"));
+})();
+
 if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
 console.log("\n" + pass + " passed, " + fail + " failed");
