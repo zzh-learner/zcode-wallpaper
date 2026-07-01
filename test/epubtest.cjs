@@ -137,5 +137,44 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("href with fragment matches spine", toc.chapters.length === 1 && toc.chapters[0].spineIndex === 0);
 })();
 
+// --- sanitizeChapterXhtml: XSS strip + src rewrite in one pass (spec §4.2, §4.4) ---
+(function(){
+  const { sanitizeChapterXhtml } = lib;
+  const raw = `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Ch1</title>
+<link rel="stylesheet" href="styles/main.css"/></head>
+<body>
+<h1 class="t">Title</h1>
+<p class="chapter-text">text</p>
+<img src="images/red.png" alt="r"/>
+<script>alert(1)</script>
+<img src="x" onerror="alert(2)"/>
+<a href="javascript:alert(3)">evil</a>
+<iframe src="evil.html"></iframe>
+<div style="color:red">x</div>
+<a href="https://example.com/path">external</a>
+<img src="https://example.com/ext.png"/>
+</body></html>`;
+  const out = sanitizeChapterXhtml(raw, "b123");
+  // XSS stripped
+  check("script stripped", !out.includes("<script"));
+  check("onerror stripped", !out.includes("onerror"));
+  check("javascript: scheme stripped", !out.toLowerCase().includes("javascript:"));
+  check("iframe stripped", !out.includes("<iframe"));
+  check("style attr stripped", !out.includes("style="));
+  // legit content kept
+  check("h1 kept", /<h1[^>]*class="t"/.test(out));
+  check("p.chapter-text kept", out.includes('class="chapter-text"'));
+  // relative src rewritten to asset endpoint
+  check("img src rewritten to asset", out.includes("/api/book/b123/asset?href=") && out.includes("red.png"));
+  // external http(s) URLs NOT rewritten
+  check("external https img not rewritten",
+    out.includes('src="https://example.com/ext.png"'));
+  check("external https link not rewritten",
+    out.includes('href="https://example.com/path"'));
+  // encoded path
+  check("rewritten href is encoded", out.includes("images%2Fred.png"));
+})();
+
 if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
 console.log("\n" + pass + " passed, " + fail + " failed");
