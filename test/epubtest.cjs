@@ -45,5 +45,31 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     scopeCss("/* hi */", "epub-content").includes("hi") || scopeCss("/* hi */", "epub-content") === "");
 })();
 
+// --- isAllowedAssetHref: path-traversal defense (spec §4.3) ---
+(function(){
+  const { isAllowedAssetHref } = lib;
+  const allowed = new Set(["images/red.png", "styles/main.css", "OEBPS/chap1.xhtml"]);
+  // whitelist member
+  check("exact whitelist member allowed", isAllowedAssetHref("images/red.png", allowed) === true);
+  check("another whitelist member", isAllowedAssetHref("styles/main.css", allowed) === true);
+  // not in whitelist
+  check("unknown href rejected", isAllowedAssetHref("images/secret.png", allowed) === false);
+  // path traversal attempts
+  check("../../etc/passwd rejected", isAllowedAssetHref("../../etc/passwd", allowed) === false);
+  check("..\\..\\windows rejected", isAllowedAssetHref("..\\..\\win.ini", allowed) === false);
+  // URL-encoded traversal
+  check("encoded ..%2f rejected", isAllowedAssetHref("images%2F..%2F..%2Fetc%2Fpasswd", allowed) === false);
+  // empty/null
+  check("empty href rejected", isAllowedAssetHref("", allowed) === false);
+  check("null href rejected", isAllowedAssetHref(null, allowed) === false);
+  // absolute path (not in whitelist as-is)
+  check("/etc/passwd rejected", isAllowedAssetHref("/etc/passwd", allowed) === false);
+  // case-sensitive (don't normalize — strict equality)
+  check("case-sensitive: IMAGES/RED.PNG != images/red.png",
+    isAllowedAssetHref("IMAGES/RED.PNG", allowed) === false);
+  // empty whitelist rejects everything
+  check("empty whitelist rejects all", isAllowedAssetHref("images/red.png", new Set()) === false);
+})();
+
 if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
 console.log("\n" + pass + " passed, " + fail + " failed");
