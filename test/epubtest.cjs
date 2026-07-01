@@ -71,5 +71,71 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("empty whitelist rejects all", isAllowedAssetHref("images/red.png", new Set()) === false);
 })();
 
+// --- buildSpineIndex: spine items -> indexed list ---
+(function(){
+  const { buildSpineIndex } = lib;
+  const spine = buildSpineIndex([{href:"chap1.xhtml"}, {href:"chap2.xhtml"}]);
+  check("spine length 2", spine.length === 2);
+  check("spine[0].href", spine[0].href === "chap1.xhtml");
+  check("spine[1].href", spine[1].href === "chap2.xhtml");
+  check("spine title null pending fill", spine[0].title === null);
+  // empty spine
+  check("empty spine -> empty array", buildSpineIndex([]).length === 0);
+})();
+
+// --- buildTocFromNav: map nav toc onto spine indices, shape aligned with txt ---
+(function(){
+  const { buildSpineIndex, buildTocFromNav } = lib;
+  const spine = buildSpineIndex([{href:"chap1.xhtml"}, {href:"chap2.xhtml"}, {href:"chap3.xhtml"}]);
+  const nav = [
+    { label: "第一章 开始", href: "chap1.xhtml", subitems: [] },
+    { label: "第二章 继续", href: "chap2.xhtml", subitems: [] },
+    { label: "第三章 结束", href: "chap3.xhtml", subitems: [] },
+  ];
+  const toc = buildTocFromNav(nav, spine);
+  // shape aligned with txt toc: { chapters, volumes }
+  check("toc has chapters array", Array.isArray(toc.chapters));
+  check("toc has volumes array", Array.isArray(toc.volumes));
+  check("3 chapters", toc.chapters.length === 3);
+  check("chapter title from nav", toc.chapters[0].title === "第一章 开始");
+  check("chapter spineIndex 0", toc.chapters[0].spineIndex === 0);
+  check("chapter spineIndex 2", toc.chapters[2].spineIndex === 2);
+  // no volumes when nav is flat
+  check("flat nav -> no volumes", toc.volumes.length === 0);
+})();
+
+// --- buildTocFromNav: nested nav -> volumes + chapters (two-level) ---
+(function(){
+  const { buildSpineIndex, buildTocFromNav } = lib;
+  const spine = buildSpineIndex([
+    {href:"c1.xhtml"},{href:"c2.xhtml"},{href:"c3.xhtml"},{href:"c4.xhtml"}
+  ]);
+  const nav = [
+    { label: "卷一", href: "c1.xhtml", subitems: [
+      { label: "第一章", href: "c1.xhtml", subitems: [] },
+      { label: "第二章", href: "c2.xhtml", subitems: [] },
+    ]},
+    { label: "卷二", href: "c3.xhtml", subitems: [
+      { label: "第三章", href: "c3.xhtml", subitems: [] },
+      { label: "第四章", href: "c4.xhtml", subitems: [] },
+    ]},
+  ];
+  const toc = buildTocFromNav(nav, spine);
+  check("nested: 4 chapters", toc.chapters.length === 4);
+  check("nested: 2 volumes", toc.volumes.length === 2);
+  check("nested: volume 1 starts at chapter 0", toc.volumes[0].startChapterIndex === 0);
+  check("nested: volume 2 starts at chapter 2", toc.volumes[1].startChapterIndex === 2);
+  check("nested: volume title kept", toc.volumes[0].title === "卷一");
+})();
+
+// --- buildTocFromNav: nav href with fragment (#id) still matches spine ---
+(function(){
+  const { buildSpineIndex, buildTocFromNav } = lib;
+  const spine = buildSpineIndex([{href:"chap1.xhtml"}]);
+  const nav = [{ label: "Ch1", href: "chap1.xhtml#section1", subitems: [] }];
+  const toc = buildTocFromNav(nav, spine);
+  check("href with fragment matches spine", toc.chapters.length === 1 && toc.chapters[0].spineIndex === 0);
+})();
+
 if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
 console.log("\n" + pass + " passed, " + fail + " failed");
