@@ -60,6 +60,13 @@ body.dragging #reader { outline: 3px dashed var(--c-accent-fg); }
   margin: 0 auto;
   padding: 1em 1.5em 4em;
   line-height: 1.8;
+  /* Theme takes precedence over epub author colors: the scoped CSS injects
+     `#epub-content { color: ...; background: ... }` (from the author's body{...}),
+     which would otherwise override the theme. !important wins on equal specificity.
+     Non-color author styles (font-family, line-height, text-indent) are unaffected
+     and still apply. */
+  background: var(--c-bg) !important;
+  color: var(--c-fg) !important;
 }
 #epub-content[hidden] { display: none; }
 /* When showing epub, hide the txt article to avoid stale content */

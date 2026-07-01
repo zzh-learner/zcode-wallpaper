@@ -11,9 +11,34 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   // simple tag selector
   check("tag selector scoped",
     scopeCss("p { color: red; }", "epub-content").includes("#epub-content p"));
-  // body/global selector
-  check("body scoped",
-    scopeCss("body { font-family: serif; }", "epub-content").includes("#epub-content body"));
+  // body/html global selector maps to the container itself (the chapter fragment
+  // has no <body>/<html> — sanitizeChapterXhtml strips them, only children are
+  // inserted under #epub-content). A naive "#epub-content body{...}" would never
+  // match, dropping the author's global font/color/margin. So body/html become
+  // "#epub-content{...}".
+  const bodyScoped = scopeCss("body { font-family: serif; }", "epub-content");
+  check("body mapped to container",
+    bodyScoped.includes("#epub-content {") && !bodyScoped.includes("#epub-content body"));
+  const htmlScoped = scopeCss("html { font-size: 18px; }", "epub-content");
+  check("html mapped to container",
+    htmlScoped.includes("#epub-content {") && !htmlScoped.includes("#epub-content html"));
+  // case-insensitive whole-word match
+  const upperBody = scopeCss("BODY { color: #333; }", "epub-content");
+  check("BODY (uppercase) mapped to container", upperBody === "#epub-content { color: #333; }");
+  // comma list: only the bare body/html selector maps; other selectors prefixed normally
+  const commaBody = scopeCss("body, p { color: red; }", "epub-content");
+  check("comma list: body->container, p->prefixed",
+    commaBody.includes("#epub-content,") && commaBody.includes("#epub-content p") &&
+    !commaBody.includes("#epub-content body"));
+  // body as a descendant combinator (body p) is NOT the bare-body case — prefixed
+  // normally (the p is a real descendant in the container).
+  const bodyDesc = scopeCss("body p { margin: 0; }", "epub-content");
+  check("body p (descendant) prefixed, not mapped",
+    bodyDesc.includes("#epub-content body p"));
+  // body.foo (compound) is NOT the bare-body case — prefixed normally
+  const bodyCompound = scopeCss("body.night { color: #ccc; }", "epub-content");
+  check("body.night (compound) prefixed, not mapped",
+    bodyCompound.includes("#epub-content body.night"));
   // class selector
   check("class scoped",
     scopeCss(".chapter-text { text-indent: 2em; }", "epub-content").includes("#epub-content .chapter-text"));

@@ -1,6 +1,6 @@
 # reader/ — ZCode 小说阅读器前端
 
-纯前端 SPA，两种运行模式：
+纯前端 SPA，支持 **txt + epub** 两种图书格式，两种运行模式：
 
 ## http 模式（推荐）
 启动 `bin/reader-server.bat` 后，在 ZCode 浏览器面板访问
@@ -23,8 +23,29 @@ reader/
     ├── codec.js      # 编码检测（拖拽模式，server lib/reader-codec.cjs 的镜像）
     ├── toc.js        # 章节切分（拖拽模式，server lib/reader-toc.cjs 的镜像）
     ├── progress.js   # localStorage 进度存取（按书 id 隔离）
-    └── book.js       # 数据访问层，封装 fetch（http）/拖拽（file）双模式
+    ├── scope-css.js  # epub CSS 作用域隔离（mirror of lib/epub.cjs scopeCss）
+    ├── book.js       # 数据访问层，封装 fetch（http）/拖拽（file）双模式
+    └── book-router.js # ?book=<id> 深链解析（控制中心点书跳 reader）
 ```
+
+## epub 支持（仅 server/http 模式）
+
+epub 是 txt 之外的第二种格式。把 `.epub` 放进 `novels/` 由 server 加载，**不支持拖拽**
+（解 zip 需要文件系统 + jszip，浏览器 FileReader 读不到目录）。
+
+- **唯一分叉点**在 `reader.js` 的 `showChapterNode`：按 `ch.format` 分派——txt 走段落列表
+  `#chapter-content`，epub 走 `#epub-content` 容器（sanitized HTML fragment + scoped `<style>`）。
+  书架/目录/进度/翻页全部复用 txt 路径，epub 差异全封装在 server 端。
+- **XSS 防护**：epub XHTML 经 server 端 `sanitize-html` 白名单过滤（剥 `<script>`/`onerror`/
+  `javascript:`），图片/链接相对路径改写到 `/api/book/:id/asset` 端点。
+- **CSS 隔离**：epub 自带 CSS 经 `scopeCss` 给每个选择器加 `#epub-content` 前缀，防止泄漏到
+  reader UI（顶栏/侧栏）。其中 `body{...}`/`html{...}` 整词选择器映射到容器本身（章节片段无
+  `<body>`/`<html>` 元素，简单加前缀会永不匹配）。
+- **主题色优先**：`#epub-content` 设 `background/color: var(--c-*) !important`，切主题时阅读区
+  背景+默认文字色跟随三种主题（暗/亮/护眼），**覆盖** epub 作者在 `body{}` 上设的颜色。子元素
+  上作者设的特定颜色（标题/链接/强调）保留作者原色，不强制跟随主题。
+
+## 章节识别能力
 
 ## 章节识别能力
 
