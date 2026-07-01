@@ -99,6 +99,10 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
     check("asset CSS content-type", cssRes.headers.get("content-type").includes("text/css"));
     const cssBody = await cssRes.text();
     check("asset CSS body has font-family", cssBody.includes("font-family"));
+    // CSS sanitize at the endpoint (spec §4.3): fixture's main.css ships an
+    // @import probe — it must be stripped before the CSS reaches the webview.
+    check("asset CSS body @import stripped", !cssBody.includes("@import"));
+    check("asset CSS body @import probe gone", !cssBody.includes("should-be-stripped"));
 
     // asset endpoint: image returns image/png
     const imgRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("images/red.png"));

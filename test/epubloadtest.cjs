@@ -10,7 +10,7 @@ if (!fs.existsSync(fixture)) {
   process.exit(1);
 }
 
-const { loadEpub, getEpubChapter, readEpubAsset } = require("../lib/epub-load.cjs");
+const { loadEpub, getEpubChapter, readEpubAsset, sanitizeCss } = require("../lib/epub-load.cjs");
 const { bookIdFor } = require("../lib/control-server.cjs");
 
 let pass = 0, fail = 0;
@@ -60,6 +60,12 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   const css = await readEpubAsset(entry, cssHref);
   check("CSS asset read returns data", css && typeof css.data === "string" && css.data.includes("font-family"));
   check("CSS asset mime text/css", css && css.mime === "text/css");
+  // CSS sanitize (spec §4.3): the fixture's main.css contains
+  // @import url("should-be-stripped.css") — it MUST be gone from served CSS.
+  check("CSS asset @import stripped", css && !css.data.includes("@import"));
+  check("CSS asset @import probe gone", css && !css.data.includes("should-be-stripped"));
+  check("CSS asset font-family survives sanitize", css && css.data.includes("font-family"));
+  check("CSS asset text-indent survives sanitize", css && css.data.includes("text-indent"));
   const imgHref = Object.keys(entry.resources.images).find(h => h.includes("red.png"));
   const img = await readEpubAsset(entry, imgHref);
   check("image asset read returns buffer", img && img.data && img.data.byteLength > 0);
@@ -72,6 +78,23 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   // non-whitelisted legit-looking path rejected
   const unknown = await readEpubAsset(entry, "styles/other.css");
   check("unknown href rejected", unknown === null);
+
+  // --- sanitizeCss direct unit test (spec §4.3 — CSS injection defense) ---
+  // Feed a payload that exercises all three stripped vectors at once:
+  //   @import url(...)          -> SSRF / data exfil via remote stylesheet fetch
+  //   expression(...)           -> IE CSS-expression JS injection (nested parens)
+  //   url(...)                  -> remote/resource fetch
+  //   body{color:red}           -> legitimate rule that MUST survive
+  const evilCss = '@import url("https://evil.com/x"); body{color:red; background:url(https://evil.com/x); width:expression(if(1){alert(1)})}';
+  const clean = sanitizeCss(evilCss);
+  check("sanitizeCss strips @import", !clean.includes("@import"));
+  check("sanitizeCss strips expression", !clean.toLowerCase().includes("expression"));
+  check("sanitizeCss strips url(", !clean.includes("url("));
+  check("sanitizeCss keeps color:red", clean.includes("color:red"));
+  check("sanitizeCss keeps body{", clean.includes("body{"));
+  // already-rewritten local asset ref (/api/...) is preserved
+  const local = sanitizeCss('body{background:url("/api/book/b1/asset?href=x") center}');
+  check("sanitizeCss keeps /api/ url()", local.includes("url(\"/api/book/"));
 
   if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
   console.log("\n" + pass + " passed, " + fail + " failed");
