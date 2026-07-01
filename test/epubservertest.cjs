@@ -61,6 +61,66 @@ function check(name, cond) { console.log((cond ? "PASS ✓ " : "FAIL ✗ ") + na
   check("guessMime unknown -> octet-stream", guessMime("a.xyz") === "application/octet-stream");
 
   fs.rmSync(tmp, { recursive: true, force: true });
+
+  // --- chapter + asset endpoints via real HTTP (lesson 12/13: cross-process glue) ---
+  await (async () => {
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), "epub-srv-"));
+    const novels2 = path.join(tmp2, "novels");
+    fs.mkdirSync(novels2);
+    fs.writeFileSync(path.join(novels2, "sample.txt"), "第一章 测试\n\u3000\u3000正文段。\n");
+    const fx = path.join(__dirname, "fixtures", "normal.epub");
+    fs.copyFileSync(fx, path.join(novels2, "normal.epub"));
+
+    const { createServer } = require("../lib/control-server.cjs");
+    const srv = await createServer({ root: tmp2, port: 0, host: "127.0.0.1" });
+    const port = srv.port;
+    const base = "http://127.0.0.1:" + port;
+    const epubId = bookIdFor("normal.epub");
+    const txtId = bookIdFor("sample.txt");
+
+    // txt chapter: has format field, keeps paragraphs
+    const txtCh = await fetch(base + "/api/book/" + txtId + "/chapter/0").then(r => r.json());
+    check("txt chapter format field", txtCh.format === "txt");
+    check("txt chapter paragraphs kept", Array.isArray(txtCh.paragraphs));
+
+    // epub chapter: html + cssHrefs, no paragraphs
+    const epubCh = await fetch(base + "/api/book/" + epubId + "/chapter/0").then(r => r.json());
+    check("epub chapter format field", epubCh.format === "epub");
+    check("epub chapter has html", typeof epubCh.html === "string" && epubCh.html.length > 0);
+    check("epub chapter has cssHrefs", Array.isArray(epubCh.cssHrefs) && epubCh.cssHrefs.length > 0);
+    check("epub chapter no paragraphs", epubCh.paragraphs === undefined);
+    check("epub chapter prev/next", epubCh.prev === null && epubCh.next === 1);
+    // XSS stripped at the endpoint (not just in pure fn)
+    check("epub chapter html XSS-stripped", !epubCh.html.includes("<script") && !epubCh.html.includes("onerror"));
+
+    // asset endpoint: whitelisted CSS returns text/css + body
+    const cssRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("styles/main.css"));
+    check("asset CSS status 200", cssRes.status === 200);
+    check("asset CSS content-type", cssRes.headers.get("content-type").includes("text/css"));
+    const cssBody = await cssRes.text();
+    check("asset CSS body has font-family", cssBody.includes("font-family"));
+
+    // asset endpoint: image returns image/png
+    const imgRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("images/red.png"));
+    check("asset image status 200", imgRes.status === 200);
+    check("asset image content-type", imgRes.headers.get("content-type").includes("image/png"));
+    const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+    check("asset image bytes > 0", imgBuf.length > 0);
+
+    // asset endpoint: path traversal -> 404
+    const evilRes = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("../../etc/passwd"));
+    check("asset path traversal 404", evilRes.status === 404);
+    const evilEnc = await fetch(base + "/api/book/" + epubId + "/asset?href=" + encodeURIComponent("images%2F..%2F..%2Fpasswd"));
+    check("asset encoded traversal 404", evilEnc.status === 404);
+
+    // asset endpoint: non-epub book -> 404
+    const noAsset = await fetch(base + "/api/book/" + txtId + "/asset?href=x");
+    check("asset on txt book 404", noAsset.status === 404);
+
+    fs.rmSync(tmp2, { recursive: true, force: true });
+    srv.close();
+  })();
+
   if (fail > 0) { console.error("\n" + fail + " FAILED"); process.exit(1); }
   console.log("\n" + pass + " passed, " + fail + " failed");
 })().catch(e => { console.error("CRASH:", e); process.exit(1); });
