@@ -143,20 +143,21 @@
       ec.innerHTML = "";
       // title
       var h = document.createElement("h2"); h.textContent = ch.title; ec.appendChild(h);
-      // cssHrefs are absolute /api/book/.../asset URLs. Link-tagged directly here;
-      // they are UNSCOPED (could leak to reader UI) — Task 10 replaces this with
-      // fetched + scopeCss'd styles. Known transient state.
-      var styleWrap = document.createElement("div");
-      (ch.cssHrefs || []).forEach(function (href) {
-        var link = document.createElement("link");
-        link.rel = "stylesheet"; link.type = "text/css"; link.href = href;
-        styleWrap.appendChild(link);
-      });
       // epub HTML body fragment (already sanitized + src-rewritten server-side)
       var body = document.createElement("div");
       body.innerHTML = ch.html;
-      ec.appendChild(styleWrap);
       ec.appendChild(body);
+      // CSS: fetch each cssHref, scopeCss it under #epub-content, inject as one <style>.
+      // Link-tagging leaks (e.g. body{...} hits reader UI) — scopeCss client-side
+      // isolates epub styles to the chapter container only.
+      var styleEl = document.createElement("style");
+      ec.appendChild(styleEl); // placeholder; filled after fetches resolve
+      Promise.all((ch.cssHrefs || []).map(function (href) {
+        return fetch(href).then(function (r) { return r.text(); })
+          .then(function (t) { return window.__readerScopeCss.scopeCss(t, "epub-content"); });
+      })).then(function (scoped) {
+        styleEl.textContent = scoped.join("\n");
+      }).catch(function () { /* CSS optional; chapter still readable without it */ });
       return ec;
     } else {
       document.body.classList.remove("epub-mode");
