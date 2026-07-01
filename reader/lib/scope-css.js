@@ -37,7 +37,12 @@ function scopeChunk(text, prefix) {
     const sel = text.slice(i, brace);
     const c = text.indexOf("}", brace); const de = c === -1 ? text.length : c;
     const db = text.slice(brace, de + (c === -1 ? 0 : 1));
-    out += sel.split(",").map(s => prefix + " " + s.trim()).join(", ") + " " + db;
+    // epub body{...}/html{...} map to the container (see lib/epub.cjs for why).
+    out += sel.split(",").map(s => {
+      const t = s.trim();
+      if (t.toLowerCase() === "body" || t.toLowerCase() === "html") return prefix;
+      return prefix + " " + t;
+    }).join(", ") + " " + db;
     i = de + (c === -1 ? 0 : 1);
   }
   return out;

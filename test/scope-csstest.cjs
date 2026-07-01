@@ -15,6 +15,12 @@ const cases = [
   "#cover { display: none; }",
   "",
   "/* comment */ p { color: blue; }",
+  // body/html mapping (must be byte-identical across runtimes)
+  "html { font-size: 18px; }",
+  "BODY { color: #333; }",
+  "body, p { color: red; }",
+  "body p { margin: 0; }",
+  "body.night { color: #ccc; }",
 ];
 for (const c of cases) {
   check("mirror: " + JSON.stringify(c).slice(0, 30), srv.scopeCss(c, "epub-content") === web.scopeCss(c, "epub-content"));
