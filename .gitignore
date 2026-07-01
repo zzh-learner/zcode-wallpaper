@@ -58,3 +58,7 @@ novels/*
 # Never commit — it's machine-local runtime data.
 .rotate.json
 .rotate.json.tmp
+
+# epub support spike workspace (library API verification, 2026-07-01).
+# Local-only — fixtures are generated into test/fixtures/ at implementation time.
+.spike-epub/
