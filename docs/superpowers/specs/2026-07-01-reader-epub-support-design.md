@@ -119,23 +119,38 @@ chapter 端点。书架/进度/翻页/目录渲染全部零改动。
 
 ## 3. 库选型 + library 加载流程（设计第 2 节，已确认）
 
-### 3.1 库选型标准（spec 阶段真调研，不凭印象拍）
+### 3.1 库选型（已 spike 验证，2026-07-01）
 
-**这是不能跳的一步**（教训 21：Node epub 库普遍年久失修）。调研时按硬指标筛：
+**库已选定并真机验证通过**（spec §10 要求的第一步已做）：
 
-| 指标 | 为什么必须 |
+- **epub 解析库：`@likecoin/epub-ts`**（v0.6.7，2026-06 仍在更新，是 epubjs 的 Node-capable 维护分支）。
+  唯一同时满足"原始 XHTML + NCX&nav + spine + manifest 枚举 + 维护活跃"的候选。`epub2`/`epub` 不行（NCX-only，
+  不支持 epub3 nav-only 书）；`@lingo-reader/epub-parser` 不行（只给处理后 HTML，不给原始 XHTML）。
+- **sanitize 库：`sanitize-html`**（Node 端主流，白名单 + transformTags 一次遍历完成 sanitize + src 改写）。
+
+**spike 验证的真实 API（实现按这个写，不要信文档/调研的二手描述——教训 21）**：
+
+| 能力 | 真实 API（已 spike 跑通） |
 |---|---|
-| 能拿到每章的**原始 XHTML 片段**（不是它抽好的纯文本） | 用户选了"保留 HTML 片段"，库若强行抽纯文本就废了 |
-| 支持 **epub2（NCX）+ epub3（nav）** 两套目录 | 真实书两种都有，漏一种就缺目录 |
-| 能拿到 **OPF spine 顺序**（阅读顺序） | 章节必须按 spine 排，否则乱序 |
-| 能列出每章引用的 **CSS / 图片资源** | 要保 CSS 和图片，得能列 manifest 引用 |
-| **最近 2 年有更新** + 周下载量合理 | Node epub 库普遍年久失修，死的库不能用 |
-| **能拿到 zip 内原始条目**（用于托管 CSS/图片） | server 要供 CSS/图片，得能读 zip 内任意文件 |
+| 加载 | `const {Book} = require("@likecoin/epub-ts/node"); const book = new Book(arrayBuffer); await book.opened;` |
+| 拿原始 XHTML（含 XSS 探针，lib 不净化） | **不用 `archive.request`**（对二进制/某些路径返回乱码）→ 用底层 jszip：`book.archive.zip.file(zipPath).async("string")` |
+| 读 CSS（字符串） | 同上 `zip.file(cssZipPath).async("string")` |
+| 读图片（二进制） | `zip.file(imgZipPath).async("arraybuffer")`（PNG 签名验证通过） |
+| **路径解析命门** | `book.resolve("images/red.png")` → `"/OEBPS/images/red.png"`（带前导 `/`），**必须 `.replace(/^\//,"")` 去掉**给 jszip |
+| 目录（NCX + nav 自动识别） | `book.navigation.toc` → `[{label, href, subitems}]` |
+| spine 顺序 | `book.spine.each(section=>section.href)`；`book.spine.first()`/`.get(i)` |
+| manifest 枚举（白名单基础） | `Object.values(book.packaging.manifest)` 每项 `{href, "media-type"}`（href 是 OPF 相对，需 resolve） |
 
-候选（spec 阶段逐个跑指标）：`epub2`、`epub-parser`、`@gretzky/epub-parser`、`epubjs` node 端等。
+**关键纠偏（调研 API 不可信，教训 21 直接体现）**：subagent 调研给的 `book.archive.request(href,"string")` API 对二进制资源返回乱码字符串（len=69 的损坏 PNG）。**生产路径必须用 `book.archive.zip`（底层 jszip 实例）直接读**，并把 `book.resolve()` 的结果 `replace(/^\//,"")` 去前导斜杠。这一步如果跳过直接按调研 API 写代码会全部白写——正是 spec §10"实施第一步是验库"的价值。
 
-**反向影响决策的风险**：如果调研发现"能拿原始 XHTML"的库几乎没有，那是真实障碍，会回头
-找用户重新确认保真度（可能降级到"基本排版"或"自解"）。**不硬推不满足的库。**
+**sanitize-html 配置（已 spike 验证）**：白名单 `allowedTags` + `allowedAttributes` + `allowedSchemes:["http","https"]`（挡 javascript:）+
+`transformTags.img` 改写 src 到 `/api/book/:id/asset?href=encoded`。一次遍历同时完成剥 XSS（script/onerror/iframe/style 属性）+ 保留正文 + src 改写。
+
+### 3.1a 依赖列表（净增 2 + 1 传递依赖）
+
+- `@likecoin/epub-ts` —— epub 解析（peer dep `linkedom`，Node 端替代浏览器 DOM）
+- `sanitize-html` —— XSS sanitize + src 改写
+- （`linkedom` 作为 epub-ts 的 peer dep 一并装）
 
 ### 3.2 library 加载流程（双格式分派）
 
@@ -458,11 +473,24 @@ epub 支持净增 **2 个依赖**：
 
 ## 10. 真机验证优先级（实施时第一步）
 
-按教训 21/28，**实施的第一步不是写代码，是验库**：
+按教训 21/28，**实施的第一步不是写代码，是验库**。
 
-1. 装候选 epub 库 → 跑一个真 epub → 确认能拿原始 XHTML（不是它抽的纯文本）。
-2. 如果候选都只能拿纯文本 → **停下回头找用户**重新确认保真度（可能降级）。
-3. 装 sanitize-html → 跑恶意 XHTML 片段 → 确认剥干净。
-4. 库都验通后，再开始按本 spec 写代码。
+**✅ 已完成（2026-07-01 spike）**：库选型 + API 真机验证全部通过，见 §3.1 真实 API 表。
+两个库（`@likecoin/epub-ts` + `sanitize-html`）已确认满足 6 条硬指标，sanitize 对 XSS 探针的剥离
+已验证。spike 发现的"用 `book.archive.zip` 直读、`resolve()` 去前导斜杠"命门已记录进 §3.1。
 
-**这一步不能跳**——跳了就是教训 1（先验假设错了全白干）的 epub 版。
+**实施时仍需真机验的（跨环境胶水，单测验不全，教训 12/13）**——这部分不能在 spec 阶段提前做，
+要在实现到对应环节时真机跑：
+1. server 端 buildLibrary 加载真 epub → library 条目正确（Task 完成时验）。
+2. asset 端点供 CSS/图片 → webview 实际能加载（CSS 生效、图片显示）。
+3. CSS scope 前缀是否真的隔离（epub CSS 不污染 reader UI）。
+4. 恶意 epub 在 webview 里真被挡（端到端 XSS，不只单测 sanitize 函数）。
+5. 进度 scrollRatio 在 epub 容器上工作。
+6. ZCode webview 加载 epub 章节的兼容性（教训 28）。
+
+**教训补丁（写进 AGENTS.md）**：
+29. **subagent/二手调研给的库 API 必须自己 spike 真跑，不能直接信。** 这次调研给的
+    `book.archive.request(href,"string")` 对二进制返回乱码，真跑才发现要改用底层 `book.archive.zip`。
+    "文档说支持 X"≠"X 真能用"——和教训 21（"应该能 X"是假设）同型，但这次的"假设"来自调研报告
+    而非自己的 CSS 常识，更隐蔽。任何引入新库的 spec，实施第一步必须是 spike 验证真实 API 形状，
+    把验证结果（含命门/坑）写进 spec，再基于真实 API 写实现计划。
