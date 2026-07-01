@@ -53,3 +53,17 @@ body.dragging #reader { outline: 3px dashed var(--c-accent-fg); }
   --c-border:#ddd; --c-hover:#eaeaea; --c-accent-bg:#e0ecff; --c-accent-fg:#1668d6; }
 .theme-sepia { --c-bg:#f4ecd8; --c-bg-alt:#ece2c4; --c-fg:#5b4636; --c-fg-muted:#9a8a72;
   --c-border:#d9cba8; --c-hover:#e8ddbf; --c-accent-bg:#d9cba8; --c-accent-fg:#8a5a00; }
+
+/* epub chapter container (scoped CSS injected here) */
+#epub-content {
+  max-width: 42em;
+  margin: 0 auto;
+  padding: 1em 1.5em 4em;
+  line-height: 1.8;
+}
+#epub-content[hidden] { display: none; }
+/* When showing epub, hide the txt article to avoid stale content */
+body.epub-mode #chapter-content { display: none; }
+body:not(.epub-mode) #epub-content { display: none; }
+/* epub content scoped styles live inside a <style id="epub-scoped-css"> element;
+   scopeCss prefixes them with #epub-content so they don't leak. */
