@@ -254,8 +254,30 @@
   }
 
   // ---- wiring ----
+  // Apply a theme class to <body>, set the toggle button icon, and persist it to
+  // localStorage so it survives reloads. Single source of truth for both init
+  // (restore last) and the toggle button (switch to next) — avoids two copies
+  // of the class-swap + icon logic drifting apart.
+  var THEME_ORDER = ["theme-dark", "theme-light", "theme-sepia"];
+  var THEME_ICONS = { "theme-dark": "🌙", "theme-light": "☀", "theme-sepia": "📜" };
+  var THEME_KEY = "zcode-reader:theme";
+  function applyTheme(theme) {
+    for (var i = 0; i < THEME_ORDER.length; i++) document.body.classList.remove(THEME_ORDER[i]);
+    document.body.classList.add(theme);
+    var btn = $("theme-toggle");
+    if (btn) btn.textContent = THEME_ICONS[theme] || "📜";
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode etc. */ }
+  }
+
   function init() {
     try {
+      // Restore last-chosen theme. Default to dark (matches index.html's body class)
+      // when localStorage is empty/unavailable (fresh install / private mode).
+      // Done before wiring buttons so the toggle icon matches the visible theme.
+      var saved = null;
+      try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+      applyTheme(saved && THEME_ORDER.indexOf(saved) >= 0 ? saved : "theme-dark");
+
       $("btn-shelf").onclick = function () {
         var sb = $("sidebar");
         sb.classList.toggle("collapsed");
@@ -268,11 +290,9 @@
       $("font-inc").onclick = function () { setFont(1); };
       $("font-dec").onclick = function () { setFont(-1); };
       $("theme-toggle").onclick = function () {
-        var order = ["theme-dark", "theme-light", "theme-sepia"];
-        var cur = order.findIndex(function (t) { return document.body.classList.contains(t); });
-        document.body.classList.remove(order[cur]);
-        document.body.classList.add(order[(cur + 1) % order.length]);
-        $("theme-toggle").textContent = { "theme-dark": "🌙", "theme-light": "☀", "theme-sepia": "📜" }[order[(cur + 1) % order.length]];
+        var cur = THEME_ORDER.findIndex(function (t) { return document.body.classList.contains(t); });
+        if (cur < 0) cur = THEME_ORDER.indexOf("theme-dark"); // safety fallback
+        applyTheme(THEME_ORDER[(cur + 1) % THEME_ORDER.length]);
       };
       $("prev-chap").onclick = function () { if (currentChapter > 0) showChapter(currentChapter - 1, 0); };
       $("next-chap").onclick = function () { showChapter(currentChapter + 1, 0); };
