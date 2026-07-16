@@ -43,8 +43,12 @@
     }).catch(function () { /* keep last cached */ }).then(function () {
       if (window.__ccShelf) renderShelf();
       if (window.__ccBookmark) renderBookmarks();
+      // skin panel: re-render each poll so active state + editor stay fresh
+      if (window.__ccSkinView) window.__ccSkinView.renderSkinPanel(st);
     });
   }
+  // expose poll so skin-view can trigger an immediate refresh after apply/remove
+  window.__ccPoll = poll;
 
   function dispatchAction(action, params) {
     var body = JSON.stringify(Object.assign({ action: action }, params || {}));
