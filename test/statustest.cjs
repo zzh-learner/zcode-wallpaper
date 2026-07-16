@@ -43,6 +43,7 @@ const fs = require("fs"), os = require("os"), path = require("path");
   }
   fs.writeFileSync(path.join(root, "wallpapers", "a.jpg"), "x");
   fs.writeFileSync(path.join(root, "novels", "b.txt"), "x");
+  fs.writeFileSync(path.join(root, "novels", "c.epub"), "x");
   fs.mkdirSync(path.join(root, "node_modules", "sharp"), { recursive: true });
   fs.writeFileSync(path.join(root, "node_modules", "sharp", "package.json"), "{}");
   fs.mkdirSync(path.join(root, "node_modules", "ws"), { recursive: true });
@@ -50,7 +51,7 @@ const fs = require("fs"), os = require("os"), path = require("path");
 
   const s = await status.snapshot({ root, transparentHwnd: null });
   check("snapshot resources counts images", s.resources.images === 1);
-  check("snapshot resources counts novels", s.resources.novels === 1);
+  check("snapshot resources counts novels (txt + epub)", s.resources.novels === 2);
   check("snapshot resources thumbs 0", s.resources.thumbs === 0);
   check("snapshot deps sharp true", s.resources.deps.sharp === true);
   check("snapshot deps ws true", s.resources.deps.ws === true);
