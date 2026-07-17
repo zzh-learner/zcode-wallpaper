@@ -20,10 +20,30 @@ var skinModel = (function () {
     // <script> inclusion, we DO require the duplicates. For simplicity in this
     // project (Node-tested), the browser path is exercised by real-machine only.
     COLOR_KEYS: ["background", "panel", "accent", "accentAlt", "text", "muted", "sidebarBg", "inputBg", "inputBorder"],
-    DECORATION_EMOJI_POSITIONS: ["top-left", "top-right", "bottom-left", "bottom-right"],
+    DECORATION_EMOJI_POSITIONS: ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"],
     isValidHex: function (s) {
       if (typeof s !== "string") return false;
       return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s);
+    },
+    normalizeEmojiBadges: function (deco) {
+      if (!deco || typeof deco !== "object") return [];
+      var out = [];
+      if (Array.isArray(deco.emojiBadges)) {
+        for (var i = 0; i < deco.emojiBadges.length; i++) {
+          var b = deco.emojiBadges[i];
+          if (!b || typeof b !== "object") continue;
+          var em = (b.emoji != null ? String(b.emoji) : "").trim();
+          if (!em) continue;
+          var pos = this.DECORATION_EMOJI_POSITIONS.indexOf(b.position) >= 0 ? b.position : "top-left";
+          out.push({ emoji: em, position: pos });
+        }
+        return out;
+      }
+      if (deco.emojiBadge != null && String(deco.emojiBadge).trim()) {
+        var pos2 = this.DECORATION_EMOJI_POSITIONS.indexOf(deco.emojiPosition) >= 0 ? deco.emojiPosition : "top-left";
+        out.push({ emoji: String(deco.emojiBadge).trim(), position: pos2 });
+      }
+      return out;
     },
     makeSkinId: function () {
       return "skin_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
@@ -39,6 +59,14 @@ var skinModel = (function () {
         }
       }
       if (t.radius != null && t.radius !== "" && (!isFinite(Number(t.radius)) || Number(t.radius) < 0)) errors.push("radius 必须是非负数字");
+      if (t.decorations && Array.isArray(t.decorations.emojiBadges)) {
+        for (var j = 0; j < t.decorations.emojiBadges.length; j++) {
+          var b = t.decorations.emojiBadges[j];
+          if (b && typeof b === "object" && b.position != null && this.DECORATION_EMOJI_POSITIONS.indexOf(b.position) === -1) {
+            errors.push("emojiBadges[" + j + "].position 无效");
+          }
+        }
+      }
       return errors.length ? { ok: false, errors: errors } : { ok: true };
     },
     makeSkinTheme: function (p) {
@@ -47,14 +75,14 @@ var skinModel = (function () {
         id: p.id || this.makeSkinId(), name: p.name || "未命名皮肤", isBuiltin: p.isBuiltin === true,
         colors: { background: c.background||null, panel: c.panel||null, accent: c.accent||null, accentAlt: c.accentAlt||null, text: c.text||null, muted: c.muted||null, sidebarBg: c.sidebarBg||null, inputBg: c.inputBg||null, inputBorder: c.inputBorder||null },
         font: p.font || null, radius: (p.radius!=null&&p.radius!=="")?Number(p.radius):null,
-        decorations: { brand: d.brand||null, sparkle: d.sparkle!==false, emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
+        decorations: { brand: d.brand||null, sparkle: d.sparkle!==false, emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
       };
     },
     builtinPresets: function () {
       return [
-        { id: "skin-pink-builtin", name: "粉紫梦境", isBuiltin: true, colors: { background:"#fff9fc",panel:"#ffffff",accent:"#8b3dce",accentAlt:"#b45cff",text:"#4c2364",muted:"#9e58bd",sidebarBg:"#fff3f9",inputBg:"#fff5fa",inputBorder:"#e484bc" }, font:null, radius:16, decorations:{brand:"粉紫梦境",sparkle:true,emojiBadge:"♡",emojiPosition:"top-left"} },
-        { id: "skin-darkgold-builtin", name: "暗夜金", isBuiltin: true, colors: { background:"#1a1410",panel:"#241d16",accent:"#d4a017",accentAlt:"#f0c040",text:"#e8dcc8",muted:"#9a8a70",sidebarBg:"#15110d",inputBg:"#2a2118",inputBorder:"#5a4a30" }, font:null, radius:12, decorations:{brand:"暗夜金",sparkle:true,emojiBadge:"✦",emojiPosition:"top-right"} },
-        { id: "skin-sepia-builtin", name: "护眼米黄", isBuiltin: true, colors: { background:"#f5ecd9",panel:"#fbf5e8",accent:"#8b6914",accentAlt:"#a8862f",text:"#3a2f1f",muted:"#7a6a4f",sidebarBg:"#efe4cb",inputBg:"#faf3e0",inputBorder:"#c9b890" }, font:null, radius:10, decorations:{brand:null,sparkle:false,emojiBadge:null,emojiPosition:"top-left"} }
+        { id: "skin-pink-builtin", name: "粉紫梦境", isBuiltin: true, colors: { background:"#fff9fc",panel:"#ffffff",accent:"#8b3dce",accentAlt:"#b45cff",text:"#4c2364",muted:"#9e58bd",sidebarBg:"#fff3f9",inputBg:"#fff5fa",inputBorder:"#e484bc" }, font:null, radius:16, decorations:{brand:"粉紫梦境",sparkle:true,emojiBadges:[{emoji:"♡",position:"top-left"},{emoji:"✦",position:"top-right"},{emoji:"🎀",position:"bottom-right"}]} },
+        { id: "skin-darkgold-builtin", name: "暗夜金", isBuiltin: true, colors: { background:"#1a1410",panel:"#241d16",accent:"#d4a017",accentAlt:"#f0c040",text:"#e8dcc8",muted:"#9a8a70",sidebarBg:"#15110d",inputBg:"#2a2118",inputBorder:"#5a4a30" }, font:null, radius:12, decorations:{brand:"暗夜金",sparkle:true,emojiBadges:[{emoji:"✦",position:"top-right"}]} },
+        { id: "skin-sepia-builtin", name: "护眼米黄", isBuiltin: true, colors: { background:"#f5ecd9",panel:"#fbf5e8",accent:"#8b6914",accentAlt:"#a8862f",text:"#3a2f1f",muted:"#7a6a4f",sidebarBg:"#efe4cb",inputBg:"#faf3e0",inputBorder:"#c9b890" }, font:null, radius:10, decorations:{brand:null,sparkle:false,emojiBadges:[]} }
       ];
     },
     ensureBuiltinPresets: function (state) {
@@ -104,6 +132,7 @@ var api = {
   COLOR_KEYS: skinModel.COLOR_KEYS,
   DECORATION_EMOJI_POSITIONS: skinModel.DECORATION_EMOJI_POSITIONS,
   isValidHex: skinModel.isValidHex,
+  normalizeEmojiBadges: skinModel.normalizeEmojiBadges,
   makeSkinId: skinModel.makeSkinId,
   validateTheme: skinModel.validateTheme,
   makeSkinTheme: skinModel.makeSkinTheme,

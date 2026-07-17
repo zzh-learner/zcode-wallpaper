@@ -43,8 +43,15 @@
     }).catch(function () { /* keep last cached */ }).then(function () {
       if (window.__ccShelf) renderShelf();
       if (window.__ccBookmark) renderBookmarks();
-      // skin panel: re-render each poll so active state + editor stay fresh
-      if (window.__ccSkinView) window.__ccSkinView.renderSkinPanel(st);
+      // skin panel: re-render each poll so active state + editor stay fresh.
+      // renderSkinPanel reads its own state from localStorage; the status snapshot
+      // (st) is only used for the "current: <name>" status line and is optional.
+      // Wrapped in try/catch because a skin-view error must NOT break the rest of
+      // the poll (shelf/bookmark already rendered above).
+      if (window.__ccSkinView) {
+        try { window.__ccSkinView.renderSkinPanel(); }
+        catch (e) { /* skin render error non-fatal */ }
+      }
     });
   }
   // expose poll so skin-view can trigger an immediate refresh after apply/remove

@@ -34,11 +34,28 @@ var cssNoRad = si.renderSkinCss({ name: "t", colors: {}, radius: null });
 check("radius skipped when null", cssNoRad.indexOf("border-radius:") < 0);
 
 // === renderSkinChrome: decorations ===
-var chrome = si.renderSkinChrome({ decorations: { brand: "我的皮肤", sparkle: true, emojiBadge: "♡", emojiPosition: "top-right" } });
+// array form (new): multiple badges at different positions
+var chrome = si.renderSkinChrome({ decorations: { brand: "我的皮肤", sparkle: true, emojiBadges: [
+  { emoji: "♡", position: "top-right" },
+  { emoji: "✦", position: "bottom-center" },
+  { emoji: "🎀", position: "middle-left" }
+] } });
 check("brand rendered", chrome.indexOf("我的皮肤") >= 0 && chrome.indexOf("skin-brand") >= 0);
 check("6 sparkle particles", (chrome.match(/<i><\/i>/g) || []).length === 6);
-check("emoji badge rendered", chrome.indexOf("♡") >= 0 && chrome.indexOf("skin-emoji-badge") >= 0);
-check("emoji position class", chrome.indexOf("skin-emoji-top-right") >= 0);
+check("emoji badge ♡ rendered", chrome.indexOf("♡") >= 0 && chrome.indexOf("skin-emoji-badge") >= 0);
+check("emoji ✦ rendered (2nd badge)", chrome.indexOf("✦") >= 0);
+check("emoji 🎀 rendered (3rd badge)", chrome.indexOf("🎀") >= 0);
+check("emoji position top-right class", chrome.indexOf("skin-emoji-top-right") >= 0);
+check("emoji position bottom-center class", chrome.indexOf("skin-emoji-bottom-center") >= 0);
+check("emoji position middle-left class", chrome.indexOf("skin-emoji-middle-left") >= 0);
+check("3 badge divs rendered", (chrome.match(/skin-emoji-badge/g) || []).length === 3);
+// legacy single form still renders (backward compat)
+var chromeLegacy = si.renderSkinChrome({ decorations: { emojiBadge: "♡", emojiPosition: "top-left" } });
+check("legacy single emoji renders", chromeLegacy.indexOf("♡") >= 0 && chromeLegacy.indexOf("skin-emoji-top-left") >= 0);
+check("legacy single -> 1 badge", (chromeLegacy.match(/skin-emoji-badge/g) || []).length === 1);
+// empty emojiBadges array -> no badges
+var chromeNoBadge = si.renderSkinChrome({ decorations: { emojiBadges: [] } });
+check("empty emojiBadges -> no badge", chromeNoBadge.indexOf("skin-emoji-badge") < 0);
 // sparkle false
 var chromeNoSparkle = si.renderSkinChrome({ decorations: { sparkle: false } });
 check("sparkle false -> no particles", chromeNoSparkle.indexOf("skin-sparkles") < 0);
@@ -51,6 +68,7 @@ var chromeCss = si.renderSkinChromeCss({ colors: { accent: "#abc", accentAlt: "#
 check("chrome wrapper pointer-events none", chromeCss.indexOf("pointer-events: none") >= 0);
 check("chrome wrapper z-index", chromeCss.indexOf("z-index: 31") >= 0);
 check("chrome uses accent color", chromeCss.indexOf("#abc") >= 0);
+check("chrome css has all 8 position classes", ["top-left","top-center","top-right","middle-left","middle-right","bottom-left","bottom-center","bottom-right"].every(function(p){return chromeCss.indexOf("skin-emoji-"+p)>=0}));
 
 // === buildSkinExpression: structure ===
 var expr = si.buildSkinExpression({ name: "测试", colors: { accent: "#abc" }, decorations: { sparkle: true } });

@@ -14,6 +14,12 @@
 
   // current editor working copy (the theme being edited). null = none selected.
   var editing = null;
+  // Remember the user's dropdown selection across polls. Without this, every
+  // poll (2s) rebuilds the <select> and resets it to activeId, so the user can't
+  // pick another theme — the dropdown "auto-refreshes" away their choice (real-
+  // machine caught bug, 2026-07-17). Defaults to activeId on first paint.
+  var selectedId = null;
+  var structureBuilt = false;
 
   function $(id) { return document.getElementById(id); }
 
@@ -23,29 +29,24 @@
     return Object.keys(state.themes).map(function (id) { return state.themes[id]; });
   }
 
-  function renderSkinPanel(statusSnapshot) {
-    var panel = $("skin-panel");
-    if (!panel) return;
-    var state = currentState();
-    var list = themeList(state);
+  // Build the panel structure (toolbar + editor container + msg). Called once
+  // on first render, or when the theme list identity changes (new/deleted theme).
+  // NOT called every poll — that would wipe the user's dropdown choice + editor
+  // input focus. Returns the html string.
+  function buildStructure(state, list, skinStatus) {
     var activeId = state.activeId;
-    var skinStatus = "";
-    if (statusSnapshot && statusSnapshot.skin) {
-      var sk = statusSnapshot.skin;
-      if (sk.applied && sk.themeName) skinStatus = "当前: " + sk.themeName;
-      else if (sk.applied) skinStatus = "当前: 已应用皮肤";
-      else if (sk.applied === false) skinStatus = "当前: 无";
-      else skinStatus = "当前: 未知（ZCode 未开）";
-    }
-
+    // selectedId follows activeId until the user picks something else; if the
+    // remembered selection no longer exists (theme deleted), fall back to activeId.
+    var chosenId = selectedId && state.themes[selectedId] ? selectedId : activeId;
+    if (!chosenId && list.length) chosenId = list[0].id;
+    selectedId = chosenId;
     var opts = list.map(function (t) {
-      var sel = t.id === activeId ? " selected" : "";
+      var sel = t.id === chosenId ? " selected" : "";
       var mark = t.isBuiltin ? " [预设]" : "";
       return '<option value="' + t.id + '"' + sel + ">" + esc(t.name) + mark + "</option>";
     }).join("");
-
     var html = '<div class="shelf-head"><h3>皮肤</h3>' +
-      '<span class="muted" style="font-size:12px">' + skinStatus + '</span></div>';
+      '<span class="muted skin-status-text" style="font-size:12px">' + skinStatus + '</span></div>';
     html += '<div class="skin-toolbar">' +
       '<select id="skin-select">' + opts + '</select> ' +
       '<button data-skin-act="apply">应用</button> ' +
@@ -55,9 +56,54 @@
       '<button data-skin-act="del">删除</button></div>';
     html += '<div id="skin-editor"></div>';
     html += '<span id="skin-msg" class="muted"></span>';
-    panel.innerHTML = html;
+    return html;
+  }
 
-    renderEditor(state);
+  // Signature of the theme list — used to detect "list changed, must rebuild".
+  // Compares id+name pairs in order. Cheap + stable across polls when nothing
+  // changed, so the dropdown survives the 2s poll.
+  function listSignature(list) {
+    return list.map(function (t) { return t.id + ":" + t.name; }).join("|");
+  }
+
+  // Force the next renderSkinPanel() to rebuild structure. Call after a theme
+  // list mutation (new/dup/del) so the dropdown reflects the change immediately.
+  // Pair with setting `selectedId` to control which option gets selected.
+  function forceStructureRebuild() { structureBuilt = false; lastSignature = null; }
+
+  var lastSignature = null;
+
+  function renderSkinPanel(statusSnapshot) {
+    var panel = $("skin-panel");
+    if (!panel) return;
+    var state = currentState();
+    var list = themeList(state);
+    var skinStatus = "";
+    if (statusSnapshot && statusSnapshot.skin) {
+      var sk = statusSnapshot.skin;
+      if (sk.applied && sk.themeName) skinStatus = "当前: " + sk.themeName;
+      else if (sk.applied) skinStatus = "当前: 已应用皮肤";
+      else if (sk.applied === false) skinStatus = "当前: 无";
+      else skinStatus = "当前: 未知（ZCode 未开）";
+    }
+
+    var sig = listSignature(list);
+    // Rebuild structure ONLY when: first paint, or theme list changed (new/
+    // deleted/renamed theme). Otherwise just refresh the status text line —
+    // this preserves the user's dropdown selection + editor input/focus.
+    if (!structureBuilt || sig !== lastSignature) {
+      panel.innerHTML = buildStructure(state, list, skinStatus);
+      structureBuilt = true;
+      lastSignature = sig;
+      renderEditor(state);
+    } else {
+      // Light refresh: update only the status text. Don't touch the select
+      // (would reset the user's choice) or the editor (would lose input focus).
+      var stEl = panel.querySelector(".skin-status-text");
+      if (stEl) stEl.textContent = skinStatus;
+      // If activeId changed (user applied a different theme elsewhere), reflect
+      // it in the editor without resetting the dropdown.
+    }
   }
 
   function renderEditor(state) {
@@ -95,18 +141,36 @@
       '<div class="skin-deco">' +
         '<label class="skin-row">品牌文字 <input type="text" data-field="brand" value="' + esc((editing.decorations && editing.decorations.brand) || "") + '" placeholder="留空=不显示"></label>' +
         '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
-        '<label class="skin-row">Emoji角标 <input type="text" data-field="emojiBadge" value="' + esc((editing.decorations && editing.decorations.emojiBadge) || "") + '" placeholder="留空=不显示" maxlength="4"></label>' +
-        '<label class="skin-row">角标位置 <select data-field="emojiPosition">' +
-          skin.DECORATION_EMOJI_POSITIONS.map(function (p) {
-            var sel = (editing.decorations && editing.decorations.emojiPosition === p) ? " selected" : "";
-            return '<option value="' + p + '"' + sel + '>' + p + '</option>';
-          }).join("") +
-        '</select></label>' +
+        '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
+        '<div id="skin-emoji-rows">' + renderEmojiRows(editing) + '</div>' +
+        '<button type="button" data-skin-act="addEmojiRow" class="skin-emoji-add">+ 添加角标</button>' +
       '</div>';
     if (!locked) html += '<button data-skin-act="save">保存</button>';
     if (locked) html += '<div class="muted" style="font-size:11px;margin-top:4px">预设主题不可直接编辑。点上方「复制」生成可编辑副本。</div>';
     html += '</fieldset>';
     ed.innerHTML = html;
+  }
+
+  // Render the emoji badge rows (one per badge). Each row: emoji text input +
+  // position dropdown + remove button. Reads from editing.decorations.emojiBadges
+  // (normalized array). Empty list shows a hint.
+  function renderEmojiRows(theme) {
+    var badges = (theme.decorations && Array.isArray(theme.decorations.emojiBadges))
+      ? theme.decorations.emojiBadges : [];
+    if (!badges.length) {
+      return '<div class="muted skin-emoji-empty" style="font-size:11px">无角标，点下方添加</div>';
+    }
+    return badges.map(function (b, idx) {
+      var opts = skin.DECORATION_EMOJI_POSITIONS.map(function (p) {
+        var s = (b.position === p) ? " selected" : "";
+        return '<option value="' + p + '"' + s + '>' + p + '</option>';
+      }).join("");
+      return '<div class="skin-emoji-row">' +
+        '<input type="text" data-emoji-idx="' + idx + '" data-emoji-field="emoji" value="' + esc(b.emoji || "") + '" maxlength="4" placeholder="♡" style="width:40px">' +
+        '<select data-emoji-idx="' + idx + '" data-emoji-field="position">' + opts + '</select>' +
+        '<button type="button" data-skin-act="delEmojiRow" data-emoji-row="' + idx + '" title="删除该角标">✕</button>' +
+        '</div>';
+    }).join("");
   }
 
   // sync color picker <-> text field
@@ -140,8 +204,21 @@
     editing.decorations = editing.decorations || {};
     editing.decorations.brand = ((ed.querySelector('[data-field="brand"]') || {}).value || "").trim() || null;
     editing.decorations.sparkle = !!(ed.querySelector('[data-field="sparkle"]') || {}).checked;
-    editing.decorations.emojiBadge = ((ed.querySelector('[data-field="emojiBadge"]') || {}).value || "").trim() || null;
-    editing.decorations.emojiPosition = (ed.querySelector('[data-field="emojiPosition"]') || {}).value || "top-left";
+    // emojiBadges: collect each row (emoji + position). Rows are identified by
+    // data-emoji-idx; read in DOM order so the array matches what the user sees.
+    var rows = ed.querySelectorAll('[data-emoji-field="emoji"]');
+    var badges = [];
+    for (var ri = 0; ri < rows.length; ri++) {
+      var rowIdx = rows[ri].getAttribute("data-emoji-idx");
+      var emojiEl = ed.querySelector('[data-emoji-idx="' + rowIdx + '"][data-emoji-field="emoji"]');
+      var posEl = ed.querySelector('[data-emoji-idx="' + rowIdx + '"][data-emoji-field="position"]');
+      if (!emojiEl || !posEl) continue;
+      var em = (emojiEl.value || "").trim();
+      if (!em) continue; // skip empty rows
+      var pos = posEl.value || "top-left";
+      badges.push({ emoji: em, position: pos });
+    }
+    editing.decorations.emojiBadges = badges;
     // colors: prefer text field, fallback to color picker
     editing.colors = editing.colors || {};
     skin.COLOR_KEYS.forEach(function (k) {
@@ -178,6 +255,29 @@
       var sel = $("skin-select");
       var id = sel ? sel.value : null;
 
+      // emoji row add/del: editor-local mutations. Collect current editor state
+      // into `editing`, mutate the badges array, re-render only the emoji rows
+      // (NOT the whole editor — preserves other field focus/values).
+      if (act === "addEmojiRow") {
+        collectEditor();
+        editing.decorations = editing.decorations || {};
+        editing.decorations.emojiBadges = editing.decorations.emojiBadges || [];
+        editing.decorations.emojiBadges.push({ emoji: "", position: "top-left" });
+        var rowsEl = $("skin-emoji-rows");
+        if (rowsEl) rowsEl.innerHTML = renderEmojiRows(editing);
+        return;
+      }
+      if (act === "delEmojiRow") {
+        collectEditor();
+        var rowIdx = parseInt(e.target.getAttribute("data-emoji-row"), 10);
+        if (isFinite(rowIdx) && editing.decorations && editing.decorations.emojiBadges) {
+          editing.decorations.emojiBadges.splice(rowIdx, 1);
+        }
+        var rowsEl2 = $("skin-emoji-rows");
+        if (rowsEl2) rowsEl2.innerHTML = renderEmojiRows(editing);
+        return;
+      }
+
       if (act === "apply") {
         var toApply = id && state.themes[id];
         if (!toApply) { setMsg("先选一个主题"); return; }
@@ -204,8 +304,9 @@
         var blank = skin.makeSkinTheme({ name: "我的新皮肤" });
         state.themes[blank.id] = blank;
         skin.saveSkins(state);
+        selectedId = blank.id;            // select the new theme
+        forceStructureRebuild();          // list changed -> rebuild dropdown
         renderSkinPanel();
-        var ns = $("skin-select"); if (ns) ns.value = blank.id;
         renderEditor(currentState());
         setMsg("已新建，编辑后点保存");
       } else if (act === "dup") {
@@ -214,8 +315,9 @@
         if (!dup) { setMsg("复制失败"); return; }
         state.themes[dup.id] = dup;
         skin.saveSkins(state);
+        selectedId = dup.id;
+        forceStructureRebuild();
         renderSkinPanel();
-        var ns2 = $("skin-select"); if (ns2) ns2.value = dup.id;
         renderEditor(currentState());
         setMsg("已复制为「" + dup.name + "」，可编辑");
       } else if (act === "del") {
@@ -225,8 +327,11 @@
         if (!confirm("删除「" + (tt ? tt.name : id) + "」？")) return;
         delete state.themes[id];
         if (state.activeId === id) state.activeId = null;
+        if (selectedId === id) selectedId = null;  // deleted selection gone
         skin.saveSkins(state);
+        forceStructureRebuild();
         renderSkinPanel();
+        renderEditor(currentState());
         setMsg("已删除");
       } else if (act === "save") {
         var collected = collectEditor();
@@ -235,15 +340,22 @@
         if (!vv.ok) { setMsg("保存失败: " + vv.errors.join("; ")); return; }
         state.themes[collected.id] = collected;
         skin.saveSkins(state);
+        selectedId = collected.id;
+        // name may have changed -> signature changes -> rebuild to refresh label
+        forceStructureRebuild();
         setMsg("已保存「" + collected.name + "」");
         renderSkinPanel();
-        var ns3 = $("skin-select"); if (ns3) ns3.value = collected.id;
         renderEditor(currentState());
       }
     });
-    // re-render editor when dropdown selection changes
+    // re-render editor when dropdown selection changes.
+    // CRITICAL: remember the user's choice in `selectedId` so the next 2s poll
+    // doesn't reset the dropdown (the "auto-refresh can't pick another" bug).
     panel.addEventListener("change", function (e) {
-      if (e.target && e.target.id === "skin-select") renderEditor(currentState());
+      if (e.target && e.target.id === "skin-select") {
+        selectedId = e.target.value;
+        renderEditor(currentState());
+      }
     });
   }
 

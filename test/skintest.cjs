@@ -34,9 +34,25 @@ check("empty string color ok (skip)", skin.validateTheme({ name: "x", colors: { 
 check("negative radius -> not ok", skin.validateTheme({ name: "x", radius: -5 }).ok === false);
 check("valid radius ok", skin.validateTheme({ name: "x", radius: 16 }).ok === true);
 check("null radius ok", skin.validateTheme({ name: "x", radius: null }).ok === true);
-check("bad emojiPosition -> not ok", skin.validateTheme({ name: "x", decorations: { emojiBadge: "♡", emojiPosition: "middle" } }).ok === false);
-check("good emojiPosition ok", skin.validateTheme({ name: "x", decorations: { emojiBadge: "♡", emojiPosition: "top-left" } }).ok === true);
+// emojiBadges: new array form validation
+check("bad emojiBadges position -> not ok", skin.validateTheme({ name: "x", decorations: { emojiBadges: [{ emoji: "♡", position: "middle" }] } }).ok === false);
+check("good emojiBadges ok", skin.validateTheme({ name: "x", decorations: { emojiBadges: [{ emoji: "♡", position: "top-left" }] } }).ok === true);
+check("good emojiBadges middle-center rejected (not in 8)", skin.validateTheme({ name: "x", decorations: { emojiBadges: [{ emoji: "♡", position: "middle-center" }] } }).ok === false);
+check("good emojiBadges bottom-center ok (new position)", skin.validateTheme({ name: "x", decorations: { emojiBadges: [{ emoji: "♡", position: "bottom-center" }] } }).ok === true);
+// legacy single-form still validated (backward compat)
+check("legacy bad emojiPosition -> not ok", skin.validateTheme({ name: "x", decorations: { emojiBadge: "♡", emojiPosition: "middle" } }).ok === false);
+check("legacy good emojiPosition ok", skin.validateTheme({ name: "x", decorations: { emojiBadge: "♡", emojiPosition: "top-left" } }).ok === true);
 check("non-object theme -> not ok", skin.validateTheme(null).ok === false);
+
+// === normalizeEmojiBadges: array form + legacy migration ===
+check("normalize empty -> []", skin.normalizeEmojiBadges({}).length === 0);
+check("normalize array form passes through", JSON.stringify(skin.normalizeEmojiBadges({ emojiBadges: [{ emoji: "♡", position: "top-left" }] })) === JSON.stringify([{ emoji: "♡", position: "top-left" }]));
+check("normalize array drops empty emoji", skin.normalizeEmojiBadges({ emojiBadges: [{ emoji: "", position: "top-left" }, { emoji: "♡", position: "top-right" }] }).length === 1);
+check("normalize array fixes bad position", skin.normalizeEmojiBadges({ emojiBadges: [{ emoji: "♡", position: "nope" }] })[0].position === "top-left");
+check("normalize legacy single -> 1-element array", skin.normalizeEmojiBadges({ emojiBadge: "✦", emojiPosition: "top-right" }).length === 1);
+check("normalize legacy single emoji preserved", skin.normalizeEmojiBadges({ emojiBadge: "✦", emojiPosition: "top-right" })[0].emoji === "✦");
+check("normalize array form wins over legacy", skin.normalizeEmojiBadges({ emojiBadges: [{ emoji: "A", position: "top-left" }], emojiBadge: "B", emojiPosition: "top-right" })[0].emoji === "A");
+check("normalize 8 positions all accepted", skin.DECORATION_EMOJI_POSITIONS.length === 8);
 
 // === makeSkinTheme: defaults + null preservation ===
 var t = skin.makeSkinTheme({ name: "test" });
@@ -48,15 +64,21 @@ check("font null by default", t.font === null);
 check("radius null by default", t.radius === null);
 check("sparkle defaults true", t.decorations.sparkle === true);
 check("brand null by default", t.decorations.brand === null);
-check("emojiBadge null by default", t.decorations.emojiBadge === null);
-check("emojiPosition defaults top-left", t.decorations.emojiPosition === "top-left");
+check("emojiBadges empty array by default", Array.isArray(t.decorations.emojiBadges) && t.decorations.emojiBadges.length === 0);
 // radius numeric coercion
 check("radius coerced to number", skin.makeSkinTheme({ radius: "16" }).radius === 16);
 check("radius empty -> null", skin.makeSkinTheme({ radius: "" }).radius === null);
 // sparkle: false respected
 check("sparkle false respected", skin.makeSkinTheme({ decorations: { sparkle: false } }).decorations.sparkle === false);
-// bad emojiPosition falls back
-check("bad emojiPosition -> top-left", skin.makeSkinTheme({ decorations: { emojiPosition: "x" } }).decorations.emojiPosition === "top-left");
+// makeSkinTheme migrates legacy single form -> emojiBadges array
+var migrated = skin.makeSkinTheme({ decorations: { emojiBadge: "♡", emojiPosition: "top-right" } });
+check("makeSkinTheme migrates legacy -> array len 1", migrated.decorations.emojiBadges.length === 1);
+check("makeSkinTheme migrates legacy emoji", migrated.decorations.emojiBadges[0].emoji === "♡");
+check("makeSkinTheme migrates legacy position", migrated.decorations.emojiBadges[0].position === "top-right");
+// makeSkinTheme passes array form through
+var arrTheme = skin.makeSkinTheme({ decorations: { emojiBadges: [{ emoji: "✦", position: "bottom-center" }, { emoji: "🎀", position: "top-left" }] } });
+check("makeSkinTheme array form len 2", arrTheme.decorations.emojiBadges.length === 2);
+check("makeSkinTheme array form pos preserved", arrTheme.decorations.emojiBadges[0].position === "bottom-center");
 
 // === builtinPresets ===
 var presets = skin.builtinPresets();
