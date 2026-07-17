@@ -86,6 +86,11 @@ check("colors all null by default", t.colors.background === null && t.colors.acc
 check("font null by default", t.font === null);
 check("radius null by default", t.radius === null);
 check("sparkle defaults true", t.decorations.sparkle === true);
+check("sparkleCount defaults 12", t.decorations.sparkleCount === 12);
+check("sparkleCount explicit 20 preserved", skin.makeSkinTheme({ decorations: { sparkleCount: 20 } }).decorations.sparkleCount === 20);
+check("sparkleCount clamps >50", skin.makeSkinTheme({ decorations: { sparkleCount: 99 } }).decorations.sparkleCount === 50);
+check("sparkleCount clamps <0", skin.makeSkinTheme({ decorations: { sparkleCount: -5 } }).decorations.sparkleCount === 0);
+check("sparkleCount null -> default 12", skin.makeSkinTheme({ decorations: { sparkleCount: null } }).decorations.sparkleCount === 12);
 check("emojiBadges empty array by default", Array.isArray(t.decorations.emojiBadges) && t.decorations.emojiBadges.length === 0);
 check("overlay defaults disabled", t.overlay.enabled === false);
 check("overlay object present by default", typeof t.overlay === "object");

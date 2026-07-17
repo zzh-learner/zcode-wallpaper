@@ -103,7 +103,7 @@ var skinModel = (function () {
         colors: { background: c.background||null, panel: c.panel||null, accent: c.accent||null, accentAlt: c.accentAlt||null, text: c.text||null, muted: c.muted||null, sidebarBg: c.sidebarBg||null, inputBg: c.inputBg||null, inputBorder: c.inputBorder||null },
         font: p.font || null, radius: (p.radius!=null&&p.radius!=="")?Number(p.radius):null,
         overlay: this.makeOverlay(p.overlay),
-        decorations: { sparkle: d.sparkle!==false, emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
+        decorations: { sparkle: d.sparkle!==false, sparkleCount: (function(){var n=Number(d.sparkleCount);if(!isFinite(n)||d.sparkleCount==null||d.sparkleCount==="")return 12;return Math.max(0,Math.min(50,Math.round(n)));})(), emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
       };
     },
     builtinPresets: function () {

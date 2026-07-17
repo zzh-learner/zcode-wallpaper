@@ -141,6 +141,7 @@
       renderOverlaySection(editing) +
       '<div class="skin-deco">' +
         '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
+        '<label class="skin-row skin-opacity-row">闪光数量 <input type="range" data-field="sparkleCount" min="0" max="50" value="' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '"><span data-sparkle-count-val>' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '</span></label>' +
         '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
         '<div id="skin-emoji-rows">' + renderEmojiRows(editing) + '</div>' +
         '<button type="button" data-skin-act="addEmojiRow" class="skin-emoji-add">+ 添加角标</button>' +
@@ -233,6 +234,11 @@
     editing.radius = (rad === "" || rad == null) ? null : Number(rad);
     editing.decorations = editing.decorations || {};
     editing.decorations.sparkle = !!(ed.querySelector('[data-field="sparkle"]') || {}).checked;
+    var scEl = ed.querySelector('[data-field="sparkleCount"]');
+    if (scEl) {
+      var sc = Number(scEl.value);
+      editing.decorations.sparkleCount = isFinite(sc) ? Math.max(0, Math.min(50, Math.round(sc))) : 12;
+    }
     // emojiBadges: collect each row (emoji + position). Rows are identified by
     // data-emoji-idx; read in DOM order so the array matches what the user sees.
     var rows = ed.querySelectorAll('[data-emoji-field="emoji"]');
@@ -310,6 +316,11 @@
       if (ovop) {
         var lbl = panel.querySelector('[data-ov-op-val="' + ovop + '"]');
         if (lbl) lbl.textContent = t.value + "%";
+      }
+      // sparkle count slider: live-update the count label
+      if (t.getAttribute && t.getAttribute("data-field") === "sparkleCount") {
+        var scLbl = panel.querySelector("[data-sparkle-count-val]");
+        if (scLbl) scLbl.textContent = t.value;
       }
     });
     panel.addEventListener("click", function (e) {

@@ -52,12 +52,12 @@ check("radius skipped when null", cssNoRad.indexOf("border-radius:") < 0);
 
 // === renderSkinChrome: decorations ===
 // array form (new): multiple badges at different positions
-var chrome = si.renderSkinChrome({ decorations: { sparkle: true, emojiBadges: [
+var chrome = si.renderSkinChrome({ decorations: { sparkle: true, sparkleCount: 6, emojiBadges: [
   { emoji: "♡", position: "top-right" },
   { emoji: "✦", position: "bottom-center" },
   { emoji: "🎀", position: "middle-left" }
 ] } });
-check("6 sparkle particles", (chrome.match(/<i><\/i>/g) || []).length === 6);
+check("6 sparkle particles (explicit count)", (chrome.match(/<i><\/i>/g) || []).length === 6);
 check("no skin-brand rendered (brand removed)", chrome.indexOf("skin-brand") < 0);
 check("emoji badge ♡ rendered", chrome.indexOf("♡") >= 0 && chrome.indexOf("skin-emoji-badge") >= 0);
 check("emoji ✦ rendered (2nd badge)", chrome.indexOf("✦") >= 0);
@@ -76,6 +76,16 @@ check("empty emojiBadges -> no badge", chromeNoBadge.indexOf("skin-emoji-badge")
 // sparkle false
 var chromeNoSparkle = si.renderSkinChrome({ decorations: { sparkle: false } });
 check("sparkle false -> no particles", chromeNoSparkle.indexOf("skin-sparkles") < 0);
+// sparkleCount configurable: default 12, explicit values, clamp
+check("sparkleCount default 12", (si.renderSkinChrome({ decorations: { sparkle: true } }).match(/<i><\/i>/g) || []).length === 12);
+check("sparkleCount=20 -> 20 particles", (si.renderSkinChrome({ decorations: { sparkle: true, sparkleCount: 20 } }).match(/<i><\/i>/g) || []).length === 20);
+check("sparkleCount=0 -> 0 particles (sparkles div still there)", (si.renderSkinChrome({ decorations: { sparkle: true, sparkleCount: 0 } }).match(/<i><\/i>/g) || []).length === 0);
+check("sparkleCount=100 clamps to 50", (si.renderSkinChrome({ decorations: { sparkle: true, sparkleCount: 100 } }).match(/<i><\/i>/g) || []).length === 50);
+// position rules generated for each particle (no more hardcoded 6)
+var css20 = si.renderSkinChromeCss({ decorations: { sparkle: true, sparkleCount: 20 }, colors: {} });
+check("20 particles -> 20 nth-child position rules", (css20.match(/nth-child\(/g) || []).length === 20);
+check("position rule 15 exists", css20.indexOf("nth-child(15)") >= 0);
+check("position rule has left+top+opacity", /nth-child\(1\) { left: [\d.]+%; top: [\d.]+%; opacity: [\d.]+; }/.test(css20));
 // all null
 var chromeEmpty = si.renderSkinChrome({ decorations: {} });
 check("empty decorations -> empty chrome", chromeEmpty === "");
