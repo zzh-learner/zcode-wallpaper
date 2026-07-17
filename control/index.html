@@ -6,43 +6,59 @@
 <link rel="stylesheet" href="control.css">
 </head>
 <body>
-  <div id="status-panel" class="panel"></div>
-  <div id="actions" class="panel">
-    <button data-action="injectImage">注入图片壁纸</button>
-    <button data-action="injectVideo">注入视频壁纸</button>
-    <button data-action="muteVideo">🔇 静音</button>
-    <button data-action="unmuteVideo">🔊 取消静音</button>
-    <button data-action="remove">移除壁纸</button>
-    <label>透明度 <input id="opacity" type="number" min="0" max="100" value="78">%
-      <button data-action="setTransparent">设透明</button></label>
-    <button data-action="resize">重新缩图</button>
-    <button data-action="setup">重装依赖</button>
-    <fieldset class="rotate-section">
-      <legend>壁纸轮播</legend>
-      <label><input type="radio" name="rotate-mode" value="image" checked> 图片</label>
-      <label><input type="radio" name="rotate-mode" value="video"> 视频</label>
-      <label>间隔 <input id="rotate-interval" type="number" min="1" value="5"> 分钟</label>
-      <button data-action="startRotate">开始轮播</button>
-      <button data-action="stopRotate">停止轮播</button>
-    </fieldset>
-    <span id="job-msg" class="muted"></span>
+  <div id="tabs" class="tab-bar">
+    <button class="tab active" data-tab="overview">总览</button>
+    <button class="tab" data-tab="wallpaper">壁纸</button>
+    <button class="tab" data-tab="reader">阅读</button>
+    <button class="tab" data-tab="skin">皮肤</button>
   </div>
-  <div id="shelf-panel" class="panel">
-    <div class="shelf-head"><h3>书架</h3><button id="open-reader" class="link-btn" title="去阅读界面">打开阅读器 →</button></div>
-    <div id="shelf-list"></div>
+  <div id="tab-content">
+    <section class="tab-pane active" data-pane="overview">
+      <div id="status-panel" class="panel"></div>
+    </section>
+    <section class="tab-pane" data-pane="wallpaper">
+      <div id="job-msg" class="toast"></div>
+      <div id="actions" class="panel">
+        <button data-action="injectImage">注入图片壁纸</button>
+        <button data-action="injectVideo">注入视频壁纸</button>
+        <button data-action="muteVideo">🔇 静音</button>
+        <button data-action="unmuteVideo">🔊 取消静音</button>
+        <button data-action="remove">移除壁纸</button>
+        <label>透明度 <input id="opacity" type="number" min="0" max="100" value="78">%
+          <button data-action="setTransparent">设透明</button></label>
+        <button data-action="resize">重新缩图</button>
+        <button data-action="setup">重装依赖</button>
+        <fieldset class="rotate-section">
+          <legend>壁纸轮播</legend>
+          <label><input type="radio" name="rotate-mode" value="image" checked> 图片</label>
+          <label><input type="radio" name="rotate-mode" value="video"> 视频</label>
+          <label>间隔 <input id="rotate-interval" type="number" min="1" value="5"> 分钟</label>
+          <button data-action="startRotate">开始轮播</button>
+          <button data-action="stopRotate">停止轮播</button>
+        </fieldset>
+      </div>
+    </section>
+    <section class="tab-pane" data-pane="reader">
+      <div id="bm-port-warn" class="banner warn-banner" style="display:none">⚠ _blank 链接修复需 ZCode 带 debug port 启动，请从 wallpaper.bat 场景 2/13 重启</div>
+      <div id="shelf-panel" class="panel">
+        <div class="shelf-head"><h3>书架</h3><button id="open-reader" class="link-btn" title="去阅读界面">打开阅读器 →</button></div>
+        <div id="shelf-list"></div>
+      </div>
+      <div id="bookmark-panel" class="panel">
+        <h3>书签</h3>
+        <div class="bookmark-add">
+          <input id="bm-title" type="text" placeholder="名称" class="wide-input">
+          <input id="bm-url" type="text" placeholder="网址（如 github.com）" class="wide-input">
+          <button data-action="addBookmark">添加</button>
+        </div>
+        <div id="bookmark-list"></div>
+        <span id="bm-msg" class="toast-inline"></span>
+      </div>
+    </section>
+    <section class="tab-pane" data-pane="skin">
+      <div id="skin-panel" class="panel"></div>
+    </section>
   </div>
-  <div id="bookmark-panel" class="panel">
-    <h3>书签</h3>
-    <div class="bookmark-add">
-      <input id="bm-title" type="text" placeholder="名称" class="wide-input" style="width:120px">
-      <input id="bm-url" type="text" placeholder="网址（如 github.com）" class="wide-input" style="width:220px">
-      <button data-action="addBookmark">添加</button>
-    </div>
-    <div id="bookmark-list"></div>
-    <span id="bm-msg" class="muted"></span>
-    <div id="bm-port-warn" class="warn" style="display:none; margin-top:8px; font-size:12px;">⚠ _blank 链接修复需 ZCode 带 debug port 启动，请从 wallpaper.bat 场景 2/13 重启</div>
-  </div>
-  <div id="skin-panel" class="panel"></div>
   <script src="lib/status-view.js"></script>
   <script src="lib/skin.js"></script>
   <script src="lib/skin-view.js"></script>

@@ -152,3 +152,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   }
   button:active { transform: none; }
 }
+
+/* ---- Tab 栏（segmented control，spec §5） ---- */
+.tab-bar { display: flex; gap: 2px; background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-control); padding: 3px; margin: 0 0 var(--space-3) 0; }
+.tab { flex: 1; background: transparent; border: none; border-radius: 7px;
+  padding: 5px 14px; margin: 0; color: var(--text-secondary);
+  font-size: var(--fs-sm); font-weight: 500; cursor: pointer;
+  transition: background 200ms ease, box-shadow 200ms ease, color 200ms ease; }
+.tab.active { background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); color: var(--text-primary); font-weight: 600; }
+.tab:hover:not(.active) { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+/* 控制中心宽度限制，居中（spec §2.3） */
+body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: border-box; }

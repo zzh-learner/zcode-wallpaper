@@ -4,6 +4,35 @@
 (function () {
   var POLL_MS = 2000;
 
+  // ---- Tab 切换（spec §2.2） ----
+  var TAB_KEY = "zcode-control:tab";
+  function activateTab(name) {
+    var tabs = document.querySelectorAll(".tab");
+    var panes = document.querySelectorAll(".tab-pane");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-tab") === name);
+    }
+    for (var j = 0; j < panes.length; j++) {
+      panes[j].classList.toggle("active", panes[j].getAttribute("data-pane") === name);
+    }
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
+    // 切到皮肤 Tab 时立即渲染一次（避免首次进入空白）
+    if (name === "skin" && window.__ccSkinView) {
+      try { window.__ccSkinView.renderSkinPanel(); } catch (e) {}
+    }
+  }
+  (function initTab() {
+    var saved = null;
+    try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
+    // 只接受已知 Tab 名
+    var valid = { overview: 1, wallpaper: 1, reader: 1, skin: 1 };
+    activateTab(saved && valid[saved] ? saved : "overview");
+  })();
+  document.getElementById("tabs").addEventListener("click", function (e) {
+    var t = e.target.getAttribute && e.target.getAttribute("data-tab");
+    if (t) activateTab(t);
+  });
+
   function setStatusHtml(html) {
     var el = document.getElementById("status-panel");
     if (el) el.innerHTML = html;
