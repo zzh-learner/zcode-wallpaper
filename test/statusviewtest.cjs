@@ -79,7 +79,7 @@ const rotNull = sv.renderStatus({
 check("render rotate null shows placeholder", rotNull.indexOf("—") !== -1);
 
 // === video wallpaper audio state display (spec §4.6) ===
-// video mode + unmuted -> shows 🔊 有声
+// video mode + unmuted -> shows 有声 (Task 8: SVG replaces emoji; assertion is text-only since Node fallback has no SVG)
 var stV = {
   zcode: { running: true, debugPort: 9222, pageTargets: 1 },
   wallpaper: { mode: "video", videoMuted: false, injectedWindows: 1, totalWindows: 1 },
@@ -88,19 +88,50 @@ var stV = {
   rotate: { running: false }, _meta: { probeErrors: [] },
 };
 var htmlV = sv.renderStatus(stV);
-check("status-view: video unmuted shows 🔊 有声", htmlV.indexOf("🔊 有声") !== -1);
-// video mode + muted -> shows 🔇 静音
+check("status-view: video unmuted shows 有声", htmlV.indexOf("有声") !== -1);
+// video mode + muted -> shows 静音
 var stM = JSON.parse(JSON.stringify(stV));
 stM.wallpaper.videoMuted = true;
 var htmlM = sv.renderStatus(stM);
-check("status-view: video muted shows 🔇 静音", htmlM.indexOf("🔇 静音") !== -1);
-check("status-view: video muted does NOT show 🔊 有声", htmlM.indexOf("🔊 有声") === -1);
+check("status-view: video muted shows 静音", htmlM.indexOf("静音") !== -1);
+check("status-view: video muted does NOT show 有声", htmlM.indexOf("有声") === -1);
 // image mode -> no audio marker
 var stI = JSON.parse(JSON.stringify(stV));
 stI.wallpaper.mode = "image";
 stI.wallpaper.videoMuted = null;
 var htmlI = sv.renderStatus(stI);
-check("status-view: image mode no audio marker", htmlI.indexOf("🔊 有声") === -1 && htmlI.indexOf("🔇 静音") === -1);
+check("status-view: image mode no audio marker", htmlI.indexOf("有声") === -1 && htmlI.indexOf("静音") === -1);
+
+// === 结构断言（spec §6 行项风格，Task 4 新增） ===
+check("结构: renderStatus 含 status-row", html1.indexOf("status-row") !== -1);
+check("结构: renderStatus 含 status-label", html1.indexOf("status-label") !== -1);
+check("结构: renderStatus 含 status-value", html1.indexOf("status-value") !== -1);
+check("结构: renderStatus 含 status-main", html1.indexOf("status-main") !== -1);
+// 端口未开时整行 warn-row 高亮（html2 是 zcode:null）
+check("结构: 端口未开时含 warn-row", html2.indexOf("warn-row") !== -1);
+// 依赖缺失时 err-row（构造一个缺依赖的 status）
+var stDepsMissing = {
+  zcode: { running: true, debugPort: 9222, pageTargets: 1 },
+  wallpaper: { mode: "none" }, transparent: null,
+  reader: { running: true }, resources: { images: 0, thumbs: 0, videos: 0, novels: 0, deps: { sharp: false } },
+  rotate: null, _meta: { probeErrors: [] },
+};
+var htmlDeps = sv.renderStatus(stDepsMissing);
+check("结构: 依赖缺失时含 err-row", htmlDeps.indexOf("err-row") !== -1);
+check("结构: 依赖缺失时显示 ✗", htmlDeps.indexOf("✗") !== -1);
+// 6 行（数 status-row 出现次数）
+var rowCount = (html1.match(/status-row/g) || []).length;
+check("结构: 共 6 个 status-row", rowCount === 6);
+// rotate stale + transparent unknown 触发 warn-row（Task 4 review 补断言）
+check("结构: rotate stale 含 warn-row", rotStale.indexOf("warn-row") !== -1);
+var stUnknown = {
+  zcode: { running: true }, wallpaper: { mode: "none" },
+  transparent: { enabled: "unknown" },
+  reader: { running: true }, resources: { images: 0 },
+  _meta: { probeErrors: [] },
+};
+var htmlUnknown = sv.renderStatus(stUnknown);
+check("结构: transparent unknown 含 warn-row", htmlUnknown.indexOf("warn-row") !== -1);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

@@ -4,13 +4,54 @@
 (function () {
   var POLL_MS = 2000;
 
+  // ---- Tab 切换（spec §2.2） ----
+  var TAB_KEY = "zcode-control:tab";
+  function activateTab(name) {
+    var tabs = document.querySelectorAll(".tab");
+    var panes = document.querySelectorAll(".tab-pane");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-tab") === name);
+    }
+    for (var j = 0; j < panes.length; j++) {
+      panes[j].classList.toggle("active", panes[j].getAttribute("data-pane") === name);
+    }
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
+    // 切到皮肤 Tab 时立即渲染一次（避免首次进入空白）
+    if (name === "skin" && window.__ccSkinView) {
+      try { window.__ccSkinView.renderSkinPanel(); } catch (e) {}
+    }
+  }
+  (function initTab() {
+    var saved = null;
+    try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
+    // 只接受已知 Tab 名
+    var valid = { overview: 1, wallpaper: 1, reader: 1, skin: 1 };
+    activateTab(saved && valid[saved] ? saved : "overview");
+  })();
+  document.getElementById("tabs").addEventListener("click", function (e) {
+    var t = e.target.getAttribute && e.target.getAttribute("data-tab");
+    if (t) activateTab(t);
+  });
+
   function setStatusHtml(html) {
     var el = document.getElementById("status-panel");
     if (el) el.innerHTML = html;
   }
-  function setJobMsg(text) {
+  // job-msg toast（spec §7.5）：成功/失败 2.5s 淡出，执行中持续显示。
+  var jobMsgTimer = null;
+  function setJobMsg(text, kind) {
     var el = document.getElementById("job-msg");
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.className = "toast show" + (kind ? " " + kind : "");
+    if (jobMsgTimer) { clearTimeout(jobMsgTimer); jobMsgTimer = null; }
+    // 执行中（kind 为空或 "执行中"文案）不自动消失，等下一次 setJobMsg 覆盖
+    if (kind === "ok" || kind === "err") {
+      jobMsgTimer = setTimeout(function () {
+        el.className = "toast" + (kind ? " " + kind : "");
+        jobMsgTimer = null;
+      }, 2500);
+    }
   }
 
   // poll status; disable CDP buttons when debug port down
@@ -81,17 +122,17 @@
       params = {};
     }
     dispatchAction(finalAction, params).then(function (res) {
-      if (res.status === 409) setJobMsg("忙，请等当前动作完成");
-      else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""));
+      if (res.status === 409) setJobMsg("忙，请等当前动作完成", "err");
+      else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""), "err");
       else {
         // mute/unmute return {accepted, affected, muted} not {jobId}; show a
         // sensible message for both shapes.
-        if (res.json.jobId) setJobMsg("已提交 (" + res.json.jobId + ")");
-        else if (typeof res.json.muted === "boolean") setJobMsg(res.json.muted ? "已静音（" + res.json.affected + "/" + res.json.total + " 窗口）" : "已取消静音（" + res.json.affected + "/" + res.json.total + " 窗口）");
-        else setJobMsg("已提交");
+        if (res.json.jobId) setJobMsg("已提交 (" + res.json.jobId + ")", "ok");
+        else if (typeof res.json.muted === "boolean") setJobMsg(res.json.muted ? "已静音（" + res.json.affected + "/" + res.json.total + " 窗口）" : "已取消静音（" + res.json.affected + "/" + res.json.total + " 窗口）", "ok");
+        else setJobMsg("已提交", "ok");
         setTimeout(poll, 500);
       }
-    }).catch(function (err) { setJobMsg("错误: " + err.message); });
+    }).catch(function (err) { setJobMsg("错误: " + err.message, "err"); });
   });
 
   document.getElementById("open-reader").addEventListener("click", function () {
@@ -111,10 +152,10 @@
     // Region 1: 我的书架 (localStorage) — click to open in reader, ✕ to remove
     html += '<div class="shelf-section-title">我的书架 (' + list.length + ')</div>';
     if (!list.length) {
-      html += '<div class="muted">空 — 从下面"全部小说"加入，或在阅读器里打开书</div>';
+      html += '<div class="empty-state">空 — 从下面"全部小说"加入，或在阅读器里打开书</div>';
     } else {
       list.forEach(function (b) {
-        html += '<div class="book' + (b.stale ? " stale" : "") + '">' +
+        html += '<div class="list-item book' + (b.stale ? " stale" : "") + '">' +
           '<span class="book-open" data-open="' + encodeURIComponent(b.bookId) + '" title="打开阅读">' +
           esc(b.filename) + (b.lastChapterTitle ? ' · <small>' + esc(b.lastChapterTitle) + '</small>' : "") + '</span>' +
           '<button class="book-del" data-del="' + encodeURIComponent(b.bookId) + '" title="从书架移除">✕</button>' +
@@ -127,10 +168,10 @@
       var addable = window.__ccShelf.shelfDiff(list, cachedBooks);
       html += '<div class="shelf-section-title">全部小说 (可加入 ' + addable.length + ')</div>';
       if (!addable.length) {
-        html += '<div class="muted">都已加入书架</div>';
+        html += '<div class="empty-state">都已加入书架</div>';
       } else {
         addable.forEach(function (b) {
-          html += '<div class="book addable">' +
+          html += '<div class="list-item book addable">' +
             '<span>' + esc(b.filename) + ' <small>(' + b.totalChapters + ' 章)</small></span>' +
             '<button class="book-add" data-add="' + encodeURIComponent(b.id) + '" title="加入书架">+</button>' +
             '</div>';
@@ -167,10 +208,10 @@
     var list = window.__ccBookmark.getBookmarks();
     var html = "";
     if (!list.length) {
-      html = '<div class="muted">还没有书签，在上方添加（名称 + 网址）</div>';
+      html = '<div class="empty-state">还没有书签，在上方添加（名称 + 网址）</div>';
     } else {
       list.forEach(function (b) {
-        html += '<div class="book">' +
+        html += '<div class="list-item book">' +
           '<span class="book-open" data-go="' + encodeURIComponent(window.__ccBookmark.buildGoUrl(b.url, b.title)) + '" title="' + esc(b.url) + '">' +
           esc(b.title) + ' <small>' + esc(b.url) + '</small></span>' +
           '<button class="book-del" data-bmdel="' + encodeURIComponent(b.id) + '" title="删除书签">✕</button>' +
@@ -180,12 +221,14 @@
     el.innerHTML = html;
   }
 
+  var bmMsgTimer = null;
   function setBmMsg(text, isErr) {
     var el = document.getElementById("bm-msg");
     if (!el) return;
     el.textContent = text;
-    el.className = isErr ? "err" : "muted";
-    if (isErr) setTimeout(function () { if (el.textContent === text) { el.textContent = ""; el.className = "muted"; } }, 2000);
+    el.className = "toast-inline" + (isErr ? " err" : " ok");
+    if (bmMsgTimer) { clearTimeout(bmMsgTimer); bmMsgTimer = null; }
+    bmMsgTimer = setTimeout(function () { el.textContent = ""; el.className = "toast-inline"; bmMsgTimer = null; }, 2500);
   }
 
   function addBookmarkFromForm() {
@@ -200,7 +243,7 @@
     titleInput.value = ""; urlInput.value = "";
     renderBookmarks();
     setBmMsg("已添加", false);
-    setTimeout(function () { var el = document.getElementById("bm-msg"); if (el) el.textContent = ""; }, 1000);
+    // （setBmMsg 已自带 2.5s 自动清空，无需再 setTimeout）
   }
 
   // bookmark-panel event delegation: add button / click-go / delete / Enter key.
