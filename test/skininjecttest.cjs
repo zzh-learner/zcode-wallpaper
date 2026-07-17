@@ -85,7 +85,12 @@ check("sparkleCount=100 clamps to 50", (si.renderSkinChrome({ decorations: { spa
 var css20 = si.renderSkinChromeCss({ decorations: { sparkle: true, sparkleCount: 20 }, colors: {} });
 check("20 particles -> 20 nth-child position rules", (css20.match(/nth-child\(/g) || []).length === 20);
 check("position rule 15 exists", css20.indexOf("nth-child(15)") >= 0);
-check("position rule has left+top+opacity", /nth-child\(1\) { left: [\d.]+%; top: [\d.]+%; opacity: [\d.]+; }/.test(css20));
+check("position rule has left+top+animation-delay", /nth-child\(1\) { left: [\d.]+%; top: [\d.]+%; animation-delay: [\d.]+s; }/.test(css20));
+// twinkle animation: keyframes + per-particle animation on .skin-sparkles i
+check("twinkle keyframes present", css20.indexOf("@keyframes skin-twinkle") >= 0);
+check("sparkle i has twinkle animation", css20.indexOf("animation: skin-twinkle") >= 0);
+check("reduced-motion guard present", css20.indexOf("prefers-reduced-motion") >= 0);
+check("per-particle delay differs", /animation-delay: 0\.00s/.test(css20) && /animation-delay: 0\.37s/.test(css20));
 // all null
 var chromeEmpty = si.renderSkinChrome({ decorations: {} });
 check("empty decorations -> empty chrome", chromeEmpty === "");
