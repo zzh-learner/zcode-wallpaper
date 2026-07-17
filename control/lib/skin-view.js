@@ -138,6 +138,7 @@
       '</div>' +
       '<label class="skin-row">字体 <input type="text" data-field="font" value="' + esc(editing.font || "") + '" placeholder="留空=不覆盖"></label>' +
       '<label class="skin-row">圆角(px) <input type="number" data-field="radius" value="' + (editing.radius != null ? editing.radius : "") + '" placeholder="留空=不覆盖" min="0"></label>' +
+      renderOverlaySection(editing) +
       '<div class="skin-deco">' +
         '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
         '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
@@ -172,7 +173,37 @@
     }).join("");
   }
 
-  // sync color picker <-> text field
+  // Render the overlay (wallpaper-coexistence) section: enable toggle + 3
+  // background colors (panel/input/sidebar) each with an opacity slider.
+  // When enabled, those 3 backgrounds render as rgba(hex, opacity) so wallpaper
+  // shows through semi-transparent UI panels (spec §overlay).
+  function renderOverlaySection(theme) {
+    var ov = theme.overlay || {};
+    function colorRow(key, label) {
+      var v = ov[key] || "";
+      return '<label class="skin-color">' + label +
+        '<input type="color" data-ov-ck="' + key + '" value="' + normalizeColor(v) + '">' +
+        '<input type="text" data-ov-ck-text="' + key + '" value="' + esc(v) + '" placeholder="留空=默认" maxlength="9"></label>';
+    }
+    function opacityRow(key, label) {
+      var v = (ov[key] != null) ? ov[key] : 100;
+      return '<label class="skin-row skin-opacity-row">' + label + ' 透明度 ' +
+        '<input type="range" data-ov-op="' + key + '" min="0" max="100" value="' + v + '">' +
+        '<span data-ov-op-val="' + key + '">' + v + '%</span></label>';
+    }
+    return '<details class="skin-overlay-section"' + (ov.enabled ? ' open' : '') + '>' +
+      '<summary>壁纸叠加（面板半透明，让壁纸透出）' + (ov.enabled ? ' ✅已启用' : '') + '</summary>' +
+      '<label class="skin-checkbox"><input type="checkbox" data-ov-field="enabled"' + (ov.enabled ? ' checked' : '') + '> 启用壁纸叠加</label>' +
+      '<div class="skin-colors">' +
+        colorRow("panelBg", "面板色") + colorRow("inputBg", "输入框色") + colorRow("sidebarBg", "侧栏色") +
+      '</div>' +
+      opacityRow("panelOpacity", "面板") +
+      opacityRow("inputOpacity", "输入框") +
+      opacityRow("sidebarOpacity", "侧栏") +
+      '<div class="muted" style="font-size:11px">启用后，壁纸作 body 背景，面板/输入框/侧栏用上面的半透明色叠加。需先注入壁纸。</div>' +
+      '</details>';
+  }
+
   function normalizeColor(v) {
     // <input type=color> needs #rrggbb; if empty/invalid, default to #ffffff
     if (!v) return "#ffffff";
@@ -225,6 +256,24 @@
       var val = (txt && txt.trim()) ? txt.trim() : (pick ? pick : "");
       editing.colors[k] = val || null;
     });
+    // overlay (wallpaper coexistence): collect enable + 3 bg colors + 3 opacities
+    var ovEnabled = !!(ed.querySelector('[data-ov-field="enabled"]') || {}).checked;
+    function ovColor(k) {
+      var txt = (ed.querySelector('[data-ov-ck-text="' + k + '"]') || {}).value;
+      var pick = (ed.querySelector('[data-ov-ck="' + k + '"]') || {}).value;
+      var val = (txt && txt.trim()) ? txt.trim() : (pick ? pick : "");
+      return val || null;
+    }
+    function ovOp(k) {
+      var el = ed.querySelector('[data-ov-op="' + k + '"]');
+      return el ? Number(el.value) : 100;
+    }
+    editing.overlay = {
+      enabled: ovEnabled,
+      panelBg: ovColor("panelBg"), panelOpacity: ovOp("panelOpacity"),
+      inputBg: ovColor("inputBg"), inputOpacity: ovOp("inputOpacity"),
+      sidebarBg: ovColor("sidebarBg"), sidebarOpacity: ovOp("sidebarOpacity")
+    };
     return editing;
   }
 
@@ -234,7 +283,7 @@
     panel.__skinBound = true;
     panel.addEventListener("change", function (e) {
       var t = e.target;
-      // sync color text<->picker
+      // sync color text<->picker (main colors)
       var ck = t.getAttribute && t.getAttribute("data-ck");
       var ckt = t.getAttribute && t.getAttribute("data-ck-text");
       if (ck) {
@@ -244,6 +293,23 @@
       if (ckt) {
         var pick = panel.querySelector('[data-ck="' + ckt + '"]');
         if (pick && normalizeColor(t.value) !== pick.value && skin.isValidHex(t.value)) pick.value = normalizeColor(t.value);
+      }
+      // sync overlay color text<->picker
+      var ovck = t.getAttribute && t.getAttribute("data-ov-ck");
+      var ovckt = t.getAttribute && t.getAttribute("data-ov-ck-text");
+      if (ovck) {
+        var otxt = panel.querySelector('[data-ov-ck-text="' + ovck + '"]');
+        if (otxt && otxt.value !== t.value) otxt.value = t.value;
+      }
+      if (ovckt) {
+        var opick = panel.querySelector('[data-ov-ck="' + ovckt + '"]');
+        if (opick && normalizeColor(t.value) !== opick.value && skin.isValidHex(t.value)) opick.value = normalizeColor(t.value);
+      }
+      // overlay opacity slider: live-update the % label
+      var ovop = t.getAttribute && t.getAttribute("data-ov-op");
+      if (ovop) {
+        var lbl = panel.querySelector('[data-ov-op-val="' + ovop + '"]');
+        if (lbl) lbl.textContent = t.value + "%";
       }
     });
     panel.addEventListener("click", function (e) {

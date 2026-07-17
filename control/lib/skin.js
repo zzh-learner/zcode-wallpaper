@@ -25,6 +25,33 @@ var skinModel = (function () {
       if (typeof s !== "string") return false;
       return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s);
     },
+    hexToRgb: function (s) {
+      if (typeof s !== "string") return null;
+      var m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(s);
+      if (!m) return null;
+      var hex = m[1];
+      if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      return { r: parseInt(hex.slice(0, 2), 16), g: parseInt(hex.slice(2, 4), 16), b: parseInt(hex.slice(4, 6), 16) };
+    },
+    hexToRgba: function (hex, opacityPct) {
+      var rgb = this.hexToRgb(hex);
+      if (!rgb) return null;
+      var a = isFinite(opacityPct) ? Math.max(0, Math.min(100, Number(opacityPct))) / 100 : 1;
+      return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + a + ")";
+    },
+    makeOverlay: function (partial) {
+      var o = (partial && typeof partial === "object") ? partial : {};
+      function op(v) { return isFinite(v) && v !== null && v !== "" ? Math.max(0, Math.min(100, Number(v))) : 100; }
+      return {
+        enabled: o.enabled === true,
+        panelBg: this.isValidHex(o.panelBg) ? o.panelBg : null,
+        panelOpacity: op(o.panelOpacity),
+        inputBg: this.isValidHex(o.inputBg) ? o.inputBg : null,
+        inputOpacity: op(o.inputOpacity),
+        sidebarBg: this.isValidHex(o.sidebarBg) ? o.sidebarBg : null,
+        sidebarOpacity: op(o.sidebarOpacity)
+      };
+    },
     normalizeEmojiBadges: function (deco) {
       if (!deco || typeof deco !== "object") return [];
       var out = [];
@@ -75,14 +102,15 @@ var skinModel = (function () {
         id: p.id || this.makeSkinId(), name: p.name || "未命名皮肤", isBuiltin: p.isBuiltin === true,
         colors: { background: c.background||null, panel: c.panel||null, accent: c.accent||null, accentAlt: c.accentAlt||null, text: c.text||null, muted: c.muted||null, sidebarBg: c.sidebarBg||null, inputBg: c.inputBg||null, inputBorder: c.inputBorder||null },
         font: p.font || null, radius: (p.radius!=null&&p.radius!=="")?Number(p.radius):null,
+        overlay: this.makeOverlay(p.overlay),
         decorations: { sparkle: d.sparkle!==false, emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
       };
     },
     builtinPresets: function () {
       return [
-        { id: "skin-pink-builtin", name: "粉紫梦境", isBuiltin: true, colors: { background:"#fff9fc",panel:"#ffffff",accent:"#8b3dce",accentAlt:"#b45cff",text:"#4c2364",muted:"#9e58bd",sidebarBg:"#fff3f9",inputBg:"#fff5fa",inputBorder:"#e484bc" }, font:null, radius:16, decorations:{sparkle:true,emojiBadges:[{emoji:"♡",position:"top-left"},{emoji:"✦",position:"top-right"},{emoji:"🎀",position:"bottom-right"}]} },
-        { id: "skin-darkgold-builtin", name: "暗夜金", isBuiltin: true, colors: { background:"#1a1410",panel:"#241d16",accent:"#d4a017",accentAlt:"#f0c040",text:"#e8dcc8",muted:"#9a8a70",sidebarBg:"#15110d",inputBg:"#2a2118",inputBorder:"#5a4a30" }, font:null, radius:12, decorations:{sparkle:true,emojiBadges:[{emoji:"✦",position:"top-right"}]} },
-        { id: "skin-sepia-builtin", name: "护眼米黄", isBuiltin: true, colors: { background:"#f5ecd9",panel:"#fbf5e8",accent:"#8b6914",accentAlt:"#a8862f",text:"#3a2f1f",muted:"#7a6a4f",sidebarBg:"#efe4cb",inputBg:"#faf3e0",inputBorder:"#c9b890" }, font:null, radius:10, decorations:{sparkle:false,emojiBadges:[]} }
+        { id: "skin-pink-builtin", name: "粉紫梦境", isBuiltin: true, colors: { background:"#fff9fc",panel:"#ffffff",accent:"#8b3dce",accentAlt:"#b45cff",text:"#4c2364",muted:"#9e58bd",sidebarBg:"#fff3f9",inputBg:"#fff5fa",inputBorder:"#e484bc" }, font:null, radius:16, overlay:{enabled:true,panelBg:"#fff9fc",panelOpacity:85,inputBg:"#fff5fa",inputOpacity:90,sidebarBg:"#fff3f9",sidebarOpacity:85}, decorations:{sparkle:true,emojiBadges:[{emoji:"♡",position:"top-left"},{emoji:"✦",position:"top-right"},{emoji:"🎀",position:"bottom-right"}]} },
+        { id: "skin-darkgold-builtin", name: "暗夜金", isBuiltin: true, colors: { background:"#1a1410",panel:"#241d16",accent:"#d4a017",accentAlt:"#f0c040",text:"#e8dcc8",muted:"#9a8a70",sidebarBg:"#15110d",inputBg:"#2a2118",inputBorder:"#5a4a30" }, font:null, radius:12, overlay:{enabled:true,panelBg:"#241d16",panelOpacity:88,inputBg:"#2a2118",inputOpacity:92,sidebarBg:"#15110d",sidebarOpacity:85}, decorations:{sparkle:true,emojiBadges:[{emoji:"✦",position:"top-right"}]} },
+        { id: "skin-sepia-builtin", name: "护眼米黄", isBuiltin: true, colors: { background:"#f5ecd9",panel:"#fbf5e8",accent:"#8b6914",accentAlt:"#a8862f",text:"#3a2f1f",muted:"#7a6a4f",sidebarBg:"#efe4cb",inputBg:"#faf3e0",inputBorder:"#c9b890" }, font:null, radius:10, overlay:{enabled:false,panelBg:"#fbf5e8",panelOpacity:90,inputBg:"#faf3e0",inputOpacity:92,sidebarBg:"#efe4cb",sidebarOpacity:88}, decorations:{sparkle:false,emojiBadges:[]} }
       ];
     },
     ensureBuiltinPresets: function (state) {
@@ -132,6 +160,9 @@ var api = {
   COLOR_KEYS: skinModel.COLOR_KEYS,
   DECORATION_EMOJI_POSITIONS: skinModel.DECORATION_EMOJI_POSITIONS,
   isValidHex: skinModel.isValidHex,
+  hexToRgb: skinModel.hexToRgb,
+  hexToRgba: skinModel.hexToRgba,
+  makeOverlay: skinModel.makeOverlay,
   normalizeEmojiBadges: skinModel.normalizeEmojiBadges,
   makeSkinId: skinModel.makeSkinId,
   validateTheme: skinModel.validateTheme,

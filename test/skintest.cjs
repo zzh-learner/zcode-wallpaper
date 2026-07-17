@@ -18,6 +18,29 @@ check("empty rejected", skin.isValidHex("") === false);
 check("non-string rejected", skin.isValidHex(null) === false);
 check("4-char #rgba rejected (only 3/6/8)", skin.isValidHex("#abcd") === false);
 
+// === hexToRgb / hexToRgba (overlay support) ===
+check("hexToRgb #1a1410", JSON.stringify(skin.hexToRgb("#1a1410")) === JSON.stringify({r:26,g:20,b:16}));
+check("hexToRgb #abc expands", JSON.stringify(skin.hexToRgb("#abc")) === JSON.stringify({r:170,g:187,b:204}));
+check("hexToRgb invalid -> null", skin.hexToRgb("red") === null);
+check("hexToRgb #rrggbbaa -> null (only 3/6)", skin.hexToRgb("#aabbccff") === null);
+check("hexToRgba 100% opaque", skin.hexToRgba("#1a1410", 100) === "rgba(26, 20, 16, 1)");
+check("hexToRgba 85%", skin.hexToRgba("#1a1410", 85) === "rgba(26, 20, 16, 0.85)");
+check("hexToRgba 0% transparent", skin.hexToRgba("#1a1410", 0) === "rgba(26, 20, 16, 0)");
+check("hexToRgba clamps >100", skin.hexToRgba("#1a1410", 150) === "rgba(26, 20, 16, 1)");
+check("hexToRgba clamps <0", skin.hexToRgba("#1a1410", -10) === "rgba(26, 20, 16, 0)");
+check("hexToRgba invalid hex -> null", skin.hexToRgba("red", 50) === null);
+
+// === makeOverlay ===
+var ov = skin.makeOverlay({ enabled: true, panelBg: "#fff", panelOpacity: 85, inputBg: "#000", inputOpacity: 90, sidebarBg: "#abc", sidebarOpacity: 80 });
+check("overlay enabled preserved", ov.enabled === true);
+check("overlay panelBg preserved", ov.panelBg === "#fff");
+check("overlay panelOpacity preserved", ov.panelOpacity === 85);
+check("overlay sidebarBg #abc accepted", ov.sidebarBg === "#abc");
+check("overlay empty -> disabled", skin.makeOverlay({}).enabled === false);
+check("overlay invalid hex -> null", skin.makeOverlay({ panelBg: "red" }).panelBg === null);
+check("overlay opacity clamps", skin.makeOverlay({ panelOpacity: 150 }).panelOpacity === 100);
+check("overlay opacity null -> 100", skin.makeOverlay({}).panelOpacity === 100);
+
 // === makeSkinId ===
 var id1 = skin.makeSkinId();
 var id2 = skin.makeSkinId();
@@ -64,6 +87,13 @@ check("font null by default", t.font === null);
 check("radius null by default", t.radius === null);
 check("sparkle defaults true", t.decorations.sparkle === true);
 check("emojiBadges empty array by default", Array.isArray(t.decorations.emojiBadges) && t.decorations.emojiBadges.length === 0);
+check("overlay defaults disabled", t.overlay.enabled === false);
+check("overlay object present by default", typeof t.overlay === "object");
+// overlay passed through makeSkinTheme
+var withOv = skin.makeSkinTheme({ overlay: { enabled: true, panelBg: "#fff", panelOpacity: 70 } });
+check("makeSkinTheme overlay enabled preserved", withOv.overlay.enabled === true);
+check("makeSkinTheme overlay panelBg preserved", withOv.overlay.panelBg === "#fff");
+check("makeSkinTheme overlay panelOpacity preserved", withOv.overlay.panelOpacity === 70);
 // radius numeric coercion
 check("radius coerced to number", skin.makeSkinTheme({ radius: "16" }).radius === 16);
 check("radius empty -> null", skin.makeSkinTheme({ radius: "" }).radius === null);

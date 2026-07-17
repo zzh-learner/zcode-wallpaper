@@ -31,6 +31,23 @@ var cssRad = si.renderSkinCss({ name: "t", colors: {}, radius: 20 });
 check("radius emitted", cssRad.indexOf("border-radius: 20px") >= 0);
 check("radius targets .bg-input", cssRad.indexOf(".bg-input") >= 0);
 var cssNoRad = si.renderSkinCss({ name: "t", colors: {}, radius: null });
+
+// === renderSkinCss: overlay mode (wallpaper coexistence) ===
+var cssOv = si.renderSkinCss({ name: "t", colors: { accent: "#abc" }, overlay: { enabled: true, panelBg: "#1a1410", panelOpacity: 85, inputBg: "#2a2118", inputOpacity: 90, sidebarBg: "#15110d", sidebarOpacity: 80 } });
+check("overlay section present", cssOv.indexOf("overlay mode") >= 0);
+check("overlay panel rgba emitted", cssOv.indexOf("rgba(26, 20, 16, 0.85)") >= 0);
+check("overlay input rgba emitted", cssOv.indexOf("rgba(42, 33, 24, 0.9)") >= 0);
+check("overlay sidebar rgba emitted", cssOv.indexOf("rgba(21, 17, 13, 0.8)") >= 0);
+check("overlay targets .bg-surface", cssOv.indexOf(".bg-surface") >= 0);
+check("overlay targets #sidebar", cssOv.indexOf("#sidebar") >= 0);
+// overlay enabled -> background/panel/sidebarBg tokens SKIPPED (would clash with wallpaper transparent)
+check("overlay skips --color-background token", cssOv.indexOf("--color-background:") < 0);
+check("overlay still emits accent token", cssOv.indexOf("--color-brand:") >= 0 || cssOv.indexOf("--color-primary:") >= 0);
+// overlay disabled -> no rgba, normal token path
+var cssNoOv = si.renderSkinCss({ name: "t", colors: { background: "#fff" }, overlay: { enabled: false } });
+check("overlay disabled -> no rgba section", cssNoOv.indexOf("overlay mode") < 0);
+check("overlay disabled -> background token present", cssNoOv.indexOf("--color-background: #fff") >= 0);
+
 check("radius skipped when null", cssNoRad.indexOf("border-radius:") < 0);
 
 // === renderSkinChrome: decorations ===
