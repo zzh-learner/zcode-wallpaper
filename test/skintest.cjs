@@ -124,16 +124,14 @@ check("dup source unchanged (builtin still builtin)", src.themes["skin-default-b
 check("dup missing source -> null", skin.duplicateTheme(src, "nope") === null);
 
 // === mirror consistency: control/lib/skin.js exports same pure fns ===
-// TODO Task 3: mirror 断言临时注释——control/lib/skin.js 还是旧实现（含 COLOR_KEYS/3 presets），
-// lib/skin.cjs 改完后这些断言会全 FAIL。Task 3 同步 mirror 后恢复（去掉注释）。
-// check("web isValidHex matches", skinWeb.isValidHex("#abc") === skin.isValidHex("#abc"));
-// check("web isValidHex rejects same", skinWeb.isValidHex("red") === false);
-// check("web makeSkinId starts skin_", skinWeb.makeSkinId().indexOf("skin_") === 0);
-// check("web validateTheme agrees ok", skinWeb.validateTheme({ name: "x", colors: { accent: "#abc" } }).ok === true);
-// check("web validateTheme agrees bad", skinWeb.validateTheme({ name: "" }).ok === false);
-// check("web COLOR_KEYS same length", skinWeb.COLOR_KEYS.length === skin.COLOR_KEYS.length);
-// check("web DECORATION_EMOJI_POSITIONS same", JSON.stringify(skinWeb.DECORATION_EMOJI_POSITIONS) === JSON.stringify(skin.DECORATION_EMOJI_POSITIONS));
-// check("web builtinPresets count 3", skinWeb.builtinPresets().length === 3);
+check("web isValidHex matches", skinWeb.isValidHex("#abc") === skin.isValidHex("#abc"));
+check("web isValidHex rejects same", skinWeb.isValidHex("red") === false);
+check("web makeSkinId starts skin_", skinWeb.makeSkinId().indexOf("skin_") === 0);
+check("web validateTheme agrees ok", skinWeb.validateTheme({ name: "x", colors: { accent: "#abc" } }).ok === true);
+check("web validateTheme agrees bad", skinWeb.validateTheme({ name: "" }).ok === false);
+check("web COLOR_KEYS both undefined", skinWeb.COLOR_KEYS === undefined && skin.COLOR_KEYS === undefined);
+check("web DECORATION_EMOJI_POSITIONS same", JSON.stringify(skinWeb.DECORATION_EMOJI_POSITIONS) === JSON.stringify(skin.DECORATION_EMOJI_POSITIONS));
+check("web builtinPresets count 1", skinWeb.builtinPresets().length === 1);
 
 // === 重构后：overlay 无 *Bg 字段，有 *Blur 字段 ===
 var ovNew = skin.makeOverlay({ enabled: true, panelOpacity: 70, panelBlur: 12, inputOpacity: 70, inputBlur: 12, sidebarOpacity: 70, sidebarBlur: 12 });
@@ -194,6 +192,16 @@ check("legacy theme colors dropped", legacyTheme.colors === undefined);
 check("legacy theme overlay panelBg dropped", legacyTheme.overlay.panelBg === undefined);
 check("legacy theme overlay panelOpacity kept", legacyTheme.overlay.panelOpacity === 85);
 check("legacy theme overlay panelBlur defaulted", legacyTheme.overlay.panelBlur === 12);
+
+// === MIRROR 一致性：skin.cjs vs control/lib/skin.js 必须字段集一致 ===
+check("mirror: makeOverlay 字段集一致", JSON.stringify(Object.keys(skin.makeOverlay({})).sort()) === JSON.stringify(Object.keys(skinWeb.makeOverlay({})).sort()));
+check("mirror: makeSkinTheme 字段集一致（无 colors）", JSON.stringify(Object.keys(skin.makeSkinTheme({})).sort()) === JSON.stringify(Object.keys(skinWeb.makeSkinTheme({})).sort()));
+check("mirror: builtinPresets 长度一致", skin.builtinPresets().length === skinWeb.builtinPresets().length);
+check("mirror: builtinPresets[0].id 一致", skin.builtinPresets()[0].id === skinWeb.builtinPresets()[0].id);
+check("mirror: OPACITY_RANGE 一致", JSON.stringify(skin.OPACITY_RANGE) === JSON.stringify(skinWeb.OPACITY_RANGE));
+check("mirror: BLUR_RANGE 一致", JSON.stringify(skin.BLUR_RANGE) === JSON.stringify(skinWeb.BLUR_RANGE));
+check("mirror: COLOR_KEYS 两边都 undefined", skin.COLOR_KEYS === undefined && skinWeb.COLOR_KEYS === undefined);
+check("mirror: makeOverlay 相同输入同输出", JSON.stringify(skin.makeOverlay({ panelOpacity: 50, panelBlur: 5 })) === JSON.stringify(skinWeb.makeOverlay({ panelOpacity: 50, panelBlur: 5 })));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
