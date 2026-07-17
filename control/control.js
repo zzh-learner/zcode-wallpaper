@@ -152,10 +152,10 @@
     // Region 1: 我的书架 (localStorage) — click to open in reader, ✕ to remove
     html += '<div class="shelf-section-title">我的书架 (' + list.length + ')</div>';
     if (!list.length) {
-      html += '<div class="muted">空 — 从下面"全部小说"加入，或在阅读器里打开书</div>';
+      html += '<div class="empty-state">空 — 从下面"全部小说"加入，或在阅读器里打开书</div>';
     } else {
       list.forEach(function (b) {
-        html += '<div class="book' + (b.stale ? " stale" : "") + '">' +
+        html += '<div class="list-item book' + (b.stale ? " stale" : "") + '">' +
           '<span class="book-open" data-open="' + encodeURIComponent(b.bookId) + '" title="打开阅读">' +
           esc(b.filename) + (b.lastChapterTitle ? ' · <small>' + esc(b.lastChapterTitle) + '</small>' : "") + '</span>' +
           '<button class="book-del" data-del="' + encodeURIComponent(b.bookId) + '" title="从书架移除">✕</button>' +
@@ -168,10 +168,10 @@
       var addable = window.__ccShelf.shelfDiff(list, cachedBooks);
       html += '<div class="shelf-section-title">全部小说 (可加入 ' + addable.length + ')</div>';
       if (!addable.length) {
-        html += '<div class="muted">都已加入书架</div>';
+        html += '<div class="empty-state">都已加入书架</div>';
       } else {
         addable.forEach(function (b) {
-          html += '<div class="book addable">' +
+          html += '<div class="list-item book addable">' +
             '<span>' + esc(b.filename) + ' <small>(' + b.totalChapters + ' 章)</small></span>' +
             '<button class="book-add" data-add="' + encodeURIComponent(b.id) + '" title="加入书架">+</button>' +
             '</div>';
@@ -208,10 +208,10 @@
     var list = window.__ccBookmark.getBookmarks();
     var html = "";
     if (!list.length) {
-      html = '<div class="muted">还没有书签，在上方添加（名称 + 网址）</div>';
+      html = '<div class="empty-state">还没有书签，在上方添加（名称 + 网址）</div>';
     } else {
       list.forEach(function (b) {
-        html += '<div class="book">' +
+        html += '<div class="list-item book">' +
           '<span class="book-open" data-go="' + encodeURIComponent(window.__ccBookmark.buildGoUrl(b.url, b.title)) + '" title="' + esc(b.url) + '">' +
           esc(b.title) + ' <small>' + esc(b.url) + '</small></span>' +
           '<button class="book-del" data-bmdel="' + encodeURIComponent(b.id) + '" title="删除书签">✕</button>' +
@@ -221,12 +221,14 @@
     el.innerHTML = html;
   }
 
+  var bmMsgTimer = null;
   function setBmMsg(text, isErr) {
     var el = document.getElementById("bm-msg");
     if (!el) return;
     el.textContent = text;
-    el.className = isErr ? "err" : "muted";
-    if (isErr) setTimeout(function () { if (el.textContent === text) { el.textContent = ""; el.className = "muted"; } }, 2000);
+    el.className = "toast-inline" + (isErr ? " err" : " ok");
+    if (bmMsgTimer) { clearTimeout(bmMsgTimer); bmMsgTimer = null; }
+    bmMsgTimer = setTimeout(function () { el.textContent = ""; el.className = "toast-inline"; bmMsgTimer = null; }, 2500);
   }
 
   function addBookmarkFromForm() {
@@ -241,7 +243,7 @@
     titleInput.value = ""; urlInput.value = "";
     renderBookmarks();
     setBmMsg("已添加", false);
-    setTimeout(function () { var el = document.getElementById("bm-msg"); if (el) el.textContent = ""; }, 1000);
+    // （setBmMsg 已自带 2.5s 自动清空，无需再 setTimeout）
   }
 
   // bookmark-panel event delegation: add button / click-go / delete / Enter key.

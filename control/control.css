@@ -59,13 +59,16 @@ html, body { margin: 0; height: 100%; background: transparent !important; color:
   box-shadow: var(--glass-shadow), var(--glass-highlight);
   padding: var(--space-3) var(--space-4);
   margin: 0 0 var(--space-3) 0; }
-h3 { margin: 0 0 6px 0; font-size: 14px; }
-/* 书架标题行：h3 + 打开阅读器链接按钮横排 (打开阅读器从 #actions 移到书架, 语义更近) */
-.shelf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+h3 { margin: 0 0 var(--space-2) 0; font-size: var(--fs-md); font-weight: 600; }
+/* 阅读 Tab 分区标题（spec §8.2）：书架/书签在一个面板内 */
+.reader-section-title { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary);
+  margin: 0 0 var(--space-2) 0; display: flex; align-items: center; justify-content: space-between; }
+/* 保留 .shelf-head 兼容（书架 h3 + 打开阅读器链接） */
+.shelf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
 .shelf-head h3 { margin: 0; }
-.link-btn { background: transparent; border: none; color: #66bb6a; padding: 0 4px; margin: 0;
-  font-size: 12px; text-decoration: underline; cursor: pointer; }
-.link-btn:hover { background: transparent; color: #81c784; }
+.link-btn { background: transparent; border: none; color: var(--accent); padding: 0 4px; margin: 0;
+  font-size: var(--fs-sm); text-decoration: none; cursor: pointer; }
+.link-btn:hover { background: transparent; color: var(--accent-hover); text-decoration: underline; }
 .st { padding: 3px 0; }
 button { background: rgba(255, 255, 255, 0.10); color: var(--text-primary);
   border: 1px solid var(--glass-border); border-radius: var(--radius-control);
@@ -84,32 +87,39 @@ input[type="number"] { width: 60px; }
 input[type="radio"], input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; }
-#shelf-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex; align-items: center; justify-content: space-between; }
-#shelf-list .book.stale { color: #ff8a80; }
-#shelf-list .book-open { cursor: pointer; flex: 1; }
-#shelf-list .book.addable { cursor: default; }
-#shelf-list .book.addable span { flex: 1; color: #ccc; }
-#shelf-list .book-del, #shelf-list .book-add { padding: 0 6px; margin: 0; font-size: 12px; line-height: 18px; }
-#shelf-list .book-del:hover { background: rgba(255, 100, 100, 0.3); }
-#shelf-list .book-add:hover { background: rgba(100, 200, 100, 0.3); }
-.shelf-section-title { font-size: 12px; color: #ffb74d; margin: 10px 0 4px 0; font-weight: bold;
-  border-bottom: 1px solid rgba(255,183,77,0.3); padding-bottom: 2px; }
+/* 列表项卡片化（spec §8.3）：书 + 书签统一 .list-item，保留 .book 兼容旧选择器 */
+.list-item { background: var(--glass-bg-elevated); border-radius: var(--radius-control);
+  padding: 8px 12px; margin-bottom: 4px; display: flex; align-items: center; gap: var(--space-2);
+  transition: background 150ms ease; }
+.list-item:hover { background: rgba(255, 255, 255, 0.22); }
+.list-item:last-child { margin-bottom: 0; }
+.list-item.stale { color: var(--err); border-left: 3px solid var(--err); }
+.list-item .book-open { cursor: pointer; flex: 1; }
+.list-item.addable { cursor: default; }
+.list-item.addable span { flex: 1; color: var(--text-secondary); }
+.list-item small { color: var(--text-secondary); display: block; font-size: var(--fs-xs);
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-del, .book-add { padding: 0 6px; margin: 0; font-size: var(--fs-sm); line-height: 18px;
+  background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); }
+.book-del:hover { background: rgba(255, 100, 100, 0.3); border-color: var(--err); }
+.book-add:hover { background: rgba(100, 200, 100, 0.3); border-color: var(--ok); }
+
+/* 分区小标题（全部小说/我的书架子区） */
+.shelf-section-title { font-size: var(--fs-sm); color: var(--text-secondary); margin: var(--space-3) 0 var(--space-1) 0;
+  font-weight: 600; }
 .shelf-section-title:first-child { margin-top: 0; }
 
-/* ---- bookmark panel (spec §6) ---- */
-/* 复用书架的 .book/.book-open 布局（书架 CSS 用 #shelf-list 限定，书签需镜像一份到 #bookmark-list），
-   否则 span 没占满 + cursor 不对，点击 title 文字外的区域点不到（真机抓到的，教训 25 同型）。*/
-#bookmark-list .book { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex; align-items: center; justify-content: space-between; }
-#bookmark-list .book-open { cursor: pointer; flex: 1; }
-#bookmark-list .book-del { padding: 0 6px; margin: 0; font-size: 12px; line-height: 18px; }
-#bookmark-list .book-del:hover { background: rgba(255, 100, 100, 0.3); }
-.wide-input { width: auto !important; min-width: 80px; }
-.bookmark-add { margin-bottom: 6px; }
-#bookmark-list .book small { color: #999; display: block; font-size: 11px;
-  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.err { color: #ff8a80; }
+/* 书签添加表单（spec §8.4） */
+.bookmark-add { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); flex-wrap: wrap; }
+.bookmark-add input, .wide-input { flex: 1; min-width: 120px; width: auto !important; }
+
+/* 空状态（spec §8.6） */
+.empty-state { padding: 20px; text-align: center; color: var(--text-secondary); font-size: var(--fs-sm); }
+
+/* 横幅（bm-port-warn 等，spec §8.5） */
+.banner { padding: 6px 12px; border-radius: var(--radius-control); font-size: var(--fs-sm);
+  margin-bottom: var(--space-2); }
+.warn-banner { background: rgba(255, 214, 10, 0.12); color: var(--warn); }
 
 /* ---- skin panel (spec §5) ---- */
 .skin-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0; }
