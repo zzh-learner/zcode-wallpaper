@@ -196,16 +196,6 @@
       "</details>";
   }
 
-  function normalizeColor(v) {
-    // <input type=color> needs #rrggbb; if empty/invalid, default to #ffffff
-    if (!v) return "#ffffff";
-    if (/^#([0-9a-fA-F]{6})$/.test(v)) return v;
-    if (/^#([0-9a-fA-F]{3})$/.test(v)) {
-      return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
-    }
-    return "#ffffff";
-  }
-
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];

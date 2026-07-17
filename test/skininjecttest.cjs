@@ -23,14 +23,14 @@ var cssFrost = si.renderSkinCss({
   overlay: { enabled: true, panelOpacity: 70, panelBlur: 12, inputOpacity: 70, inputBlur: 12, sidebarOpacity: 70, sidebarBlur: 12 }
 });
 check("frost overlay section present", cssFrost.indexOf("frosted glass") >= 0 || cssFrost.indexOf("overlay") >= 0);
-// 面板：color-mix + var(--color-neutral-900) + 70%
-check("frost panel color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-900) 70%, transparent)") >= 0);
+// 面板：color-mix + var(--color-neutral-900, fallback) + 70%
+check("frost panel color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-900, #121216) 70%, transparent)") >= 0);
 check("frost panel backdrop-filter blur 12px", cssFrost.indexOf("backdrop-filter: blur(12px)") >= 0);
 check("frost has webkit prefix", cssFrost.indexOf("-webkit-backdrop-filter") >= 0);
-// 输入框：var(--color-input)
-check("frost input color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-input)") >= 0);
-// 侧栏：var(--color-neutral-950)
-check("frost sidebar color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-950)") >= 0);
+// 输入框：var(--color-input, fallback)
+check("frost input color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-input, #2b2b2b)") >= 0);
+// 侧栏：var(--color-neutral-950, fallback)
+check("frost sidebar color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-950, #0c0c0e)") >= 0);
 // 选择器
 check("frost targets main", cssFrost.indexOf("main, [role='main']") >= 0);
 check("frost targets .bg-input", cssFrost.indexOf(".bg-input") >= 0);
@@ -54,9 +54,9 @@ var cssCustom = si.renderSkinCss({
   name: "custom",
   overlay: { enabled: true, panelOpacity: 50, panelBlur: 5, inputOpacity: 80, inputBlur: 0, sidebarOpacity: 30, sidebarBlur: 20 }
 });
-check("custom panel opacity 50%", cssCustom.indexOf("var(--color-neutral-900) 50%, transparent)") >= 0);
+check("custom panel opacity 50%", cssCustom.indexOf("var(--color-neutral-900, #121216) 50%, transparent)") >= 0);
 check("custom panel blur 5px", cssCustom.indexOf("blur(5px)") >= 0);
-check("custom input opacity 80%", cssCustom.indexOf("var(--color-input) 80%, transparent)") >= 0);
+check("custom input opacity 80%", cssCustom.indexOf("var(--color-input, #2b2b2b) 80%, transparent)") >= 0);
 // blur=0 的区域：可以省略 backdrop-filter（无意义 GPU 开销）
 // sidebar blur=20
 check("custom sidebar blur 20px", cssCustom.indexOf("blur(20px)") >= 0);
