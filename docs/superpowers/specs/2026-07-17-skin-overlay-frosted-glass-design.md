@@ -84,7 +84,7 @@
 
 **不做单独迁移脚本**——归一化函数天然兜底。
 
-## 3. 底色来源机制（核心技术）
+## 3. 底色来源机制（核心技术，2026-07-17 spike 后修订）
 
 ### 3.1 问题
 
@@ -93,57 +93,80 @@ rgba 公式 `rgba(R,G,B,α)` 必须有 RGB 值。删了用户颜色字段后，R
 **答**：跟随 ZCode 主题色。ZCode 的 `--color-background` 等变量按主题（深色/浅色）不同。皮肤系统读取这些
 变量的当前值，作为半透层的底色。
 
-### 3.2 取值路径：备份原主题色到自定义变量
+### 3.2 ~~原方案：备份原主题色到自定义变量~~（spike 失败，2026-07-17）
 
-当前 `lib/wallpaper.css:36-48` 把所有 UI 颜色变量强制设 `transparent !important`，所以主题变量读不出值。
-方案：在 wallpaper.css **顶部**（transparent 覆盖之前）先备份 ZCode 原主题色到自定义变量：
+原方案是：在 wallpaper.css 顶部用 `--zcode-wp-orig-bg: var(--color-background)` 备份原主题色，
+靠 CSS 自定义属性「求值即写入」保住快照。
 
+**Spike 真机结果**：机制**不成立**。CSS 自定义属性是**按引用延迟解析**——读 `--zcode-wp-orig-bg` 时才
+去解析 `var(--color-background)`，那时它已被 `transparent !important` 覆盖。备份变量读出来也是
+`transparent`。原推断「求值即写入快照」错误。
+
+> **教训**（AGENTS.md 教训 21）：CSS 级联机制是假设，只有 `getComputedStyle` 读到的真实值才是事实。
+> 这次靠 spike 脚本（`scripts/inspect-skin2.cjs` 加 backupProbe）一跑就发现假设错误，避免了基于错误
+> 假设写出整条实现链。
+
+### 3.3 新方案：CSS `color-mix()` + 原生底层变量（spike 验证有效）
+
+Spike 顺带挖出两条关键事实：
+
+1. **ZCode 底层主题变量未被 wallpaper.css 覆盖**：
+   - `--color-input` = `#2b2b2b`（hex，直接可用）
+   - `--color-brand` = `#d4a017`（hex，直接可用）
+   - `--color-foreground` = `#e8dcc8`（hex）
+   - `--color-neutral-900` = `oklch(20.5% 0 0)`（深色主题底层灰）
+   - `--color-neutral-950` = `oklch(14.5% 0 0)`（更深）
+   - `--color-neutral-50` = `oklch(98.5% 0 0)`（浅色主题底层白）
+   - 只有 `--color-background` 系列被 wallpaper.css 强制 transparent，**底层 neutral 完整保留**。
+
+2. **CSS `color-mix()` 在 ZCode Chromium 上完美工作**（Chrome 146 / Electron 41，远超要求的 111+）：
+   ```
+   color-mix(in srgb, var(--color-neutral-900) 70%, transparent)
+     → color(srgb 0.09 0.09 0.09 / 0.7)   ✓ 解析成半透明
+   color-mix(in srgb, oklch(20.5% 0 0) 70%, transparent)
+     → color(srgb 0.09 0.09 0.09 / 0.7)   ✓ oklch 也能 mix
+   color-mix(in srgb, var(--color-brand) 70%, transparent)
+     → color(srgb 0.83 0.62 0.09 / 0.7)   ✓ hex var 也能 mix
+   ```
+
+**新机制**：皮肤注入的 `<style>` 直接写 `color-mix(in srgb, var(--底层主题变量) N%, transparent)`，
+让 CSS 引擎自己解析。**完全不需要**：
+- ❌ 改 wallpaper.css 加备份声明
+- ❌ JS 运行时读 computed value 转 RGB 元组
+- ❌ Node 侧拼 rgba 字符串
+
+只需在注入的 `<style>` 写：
 ```css
-/* === 主题色备份（必须在 transparent 覆盖之前）=== */
-:root {
-  --zcode-wp-orig-bg: var(--color-background);           /* 给面板 */
-  --zcode-wp-orig-panel: var(--color-background-alt);    /* 给侧栏 */
-  --zcode-wp-orig-input: var(--color-input);             /* 给输入框 */
-  --zcode-wp-orig-accent: var(--color-brand);            /* 给 sparkle 辉光 */
-}
-
-/* === 下面是现有的 transparent 覆盖（不变）=== */
-:root {
-  --color-background: transparent !important;
-  --color-background-alt: transparent !important;
-  --color-input: transparent !important;
-  /* ... 其他不变 ... */
+main, [role='main'] {
+  background-color: color-mix(in srgb, var(--color-neutral-900) 70%, transparent) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
 }
 ```
 
-### 3.3 为什么有效（CSS 级联机制）
+CSS 引擎在浏览器里实时解析 `var()`，ZCode 切主题时 `--color-neutral-900` 变化（深色↔浅色不同值），
+磨砂层底色**真跟随主题**。
 
-CSS 自定义属性在级联里**求值即写入**。第一段 `--zcode-wp-orig-bg: var(--color-background)` 执行时，
-`--color-background` 还是 ZCode 原色（未被覆盖），值被「快照」进 `--zcode-wp-orig-bg`。第二段把
-`--color-background` 改成 transparent，但**已经写入的快照不会被回溯修改**。
+### 3.4 三区域 → 原生底层变量映射
 
-> ⚠️ **这是 CSS 级联机制的推断，必须真机验**（AGENTS.md 教训 21：「应该能 X」是假设，探测真实 state 是
-> 事实）。spec §8.1 把这条列为**实施第一步必须 spike 验证**——若机制不成立，回退方案见 §3.5。
-
-### 3.4 三区域 → 四个备份变量的映射
-
-| 区域 | overlay 字段前缀 | 读取的备份变量 | 对应原 ZCode 变量 |
+| 区域 | overlay 字段前缀 | 用的原生变量 | spike 真机值 |
 | --- | --- | --- | --- |
-| 面板 | `panel*` | `--zcode-wp-orig-bg` | `--color-background` |
-| 输入框 | `input*` | `--zcode-wp-orig-input` | `--color-input` |
-| 侧栏 | `sidebar*` | `--zcode-wp-orig-panel` | `--color-background-alt` |
-| sparkle 辉光 | （非 overlay） | `--zcode-wp-orig-accent` | `--color-brand` |
+| 面板 | `panel*` | `--color-neutral-900` | `oklch(20.5% 0 0)` |
+| 输入框 | `input*` | `--color-input` | `#2b2b2b`（hex） |
+| 侧栏 | `sidebar*` | `--color-neutral-950` | `oklch(14.5% 0 0)`（侧栏更深，与面板区分） |
+| sparkle 辉光 | （非 overlay） | `--color-brand` | `#d4a017`（hex） |
 
-这样三区域的磨砂层底色各自跟随主题里对应的色变量，保留视觉层次（深色主题下输入框往往略浅于背景）。
+注意：侧栏用 `--color-neutral-950` 而不是 `--color-background-alt`，因为后者被 wallpaper.css 覆盖了，
+而 neutral-950 没被覆盖，且更深一层（与面板 900 区分层次）。这是 spike 真机数据支持的选择，不是猜。
 
-### 3.5 回退方案（若 §3.3 机制不成立）
+### 3.5 （已废弃）原回退方案
 
-若真机验发现备份变量也变成 transparent（级联机制与预期不符），回退为**硬编码主题映射表**：
-- 深色主题：`rgba(18, 18, 22, α)`
-- 浅色主题：`rgba(255, 255, 255, α)`
-- accent 默认：`#b45cff`
+~~硬编码映射表~~：不再需要。新方案 §3.3 真机已验有效，且天然跟随主题（比硬编码好）。
 
-代价：不是真「跟随」，是「模拟跟随」，ZCode 主题升级后可能偏色。但稳定可控。**回退时需用户重新确认**。
+**ZCode 升级风险**：若 ZCode 未来的主题改了 `--color-neutral-*` / `--color-input` / `--color-brand`
+这些变量名（或换色彩系统），color-mix 会失效（var() 解析失败 → 元素无背景色）。这是可接受的脆弱性，
+比硬编码映射表强（硬编码连主题色本身都跟不上）。spec §10 已记录此风险，提示实施者写探测脚本时把
+这些变量名当 SPI（真机接口）对待，ZCode 升级要重跑探测。
 
 ## 4. CSS 注入规则（`renderSkinCss` 重写）
 
@@ -151,49 +174,33 @@ CSS 自定义属性在级联里**求值即写入**。第一段 `--zcode-wp-orig-
 
 注入 `rgba(用户色, 透明度) !important` 到元素选择器。
 
-### 4.2 新规则
+### 4.2 新规则（color-mix 方案）
 
-注入「半透明 + 模糊」到元素选择器，**底色来自运行时读取的备份变量**：
+注入「半透明 + 模糊」到元素选择器，**底色用 `color-mix(in srgb, var(--原生底层变量) N%, transparent)`**：
 
 ```js
-// 伪代码（实际实现见 §4.3）
+// 伪代码
 if (ov.enabled) {
   rules.push(`main, [role='main'] {
-    background-color: rgba(${bgRgbTuple}, ${ov.panelOpacity / 100}) !important;
+    background-color: color-mix(in srgb, var(--color-neutral-900) ${ov.panelOpacity}%, transparent) !important;
     backdrop-filter: blur(${ov.panelBlur}px) !important;
     -webkit-backdrop-filter: blur(${ov.panelBlur}px) !important;
   }`);
-  // inputBg / sidebarBg 同理，分别用 inputRgbTuple / sidebarRgbTuple
+  // 输入框用 var(--color-input)，侧栏用 var(--color-neutral-950)，见 §3.4
 }
 ```
 
-### 4.3 RGB 元组的运行时读取（解法 C：JS 读 computed value）
+**核心优势**：
+- **零 JS 转换**——不需要 Runtime.evaluate 读 computed value，直接拼字符串注入 `<style>`。CSS 引擎
+  在浏览器里自己解析 `var() + color-mix()`。
+- **真跟随主题**——ZCode 切主题时，`--color-neutral-900` 的值会变（深色/浅色不同），磨砂层底色自动变。
+- **不动 wallpaper.css**——新方案完全不碰 wallpaper.css（§6 整章废弃）。
 
-CSS 没法直接 `rgba(var(--x), 0.7)`（因为变量值是 `#121216` 不是 `18,18,22`）。**不用 `color-mix`**
-（虽 Chromium 111+ 支持，但增加 CSS 版本依赖）。**用 JS 运行时读 computed value 拼字符串**：
+### 4.3 实现简化（相比原方案）
 
-CDP 注入时 `Runtime.evaluate` 先读 4 个备份变量的 computed value：
-```js
-(function(){
-  var root = getComputedStyle(document.documentElement);
-  function toTuple(varName, fallback) {
-    var hex = root.getPropertyValue(varName).trim() || fallback;
-    // 解析 #RRGGBB 或 rgb() 为 "R, G, B"
-    return hexToRgbTuple(hex);
-  }
-  return JSON.stringify({
-    bg: toTuple('--zcode-wp-orig-bg', '#121216'),
-    input: toTuple('--zcode-wp-orig-input', '#1a1a20'),
-    panel: toTuple('--zcode-wp-orig-panel', '#16161a'),
-    accent: toTuple('--zcode-wp-orig-accent', '#b45cff')
-  });
-})()
-```
-
-拿到 JSON 后，在 Node 侧（`skin-inject.cjs`）拼装完整的 `<style>` 字符串，再注入。这样：
-- 无 CSS 版本依赖
-- 无颜色格式兼容问题
-- 注入表达式稍长但清晰
+原方案需要：`Runtime.evaluate 读备份变量 → parseBackupVarsResult → Node 拼字符串 → 二次 evaluate`。
+新方案只需：`Node 拼字符串（直接写 color-mix）→ 单次 evaluate`。`buildSkinExpression` 回到**单步注入**，
+不需要 `readBackupVarsExpression` / `parseBackupVarsResult` 这些胶水代码。注入更简单、更快、更脆点更少。
 
 ### 4.4 sparkle 辉光色
 
@@ -202,8 +209,9 @@ CDP 注入时 `Runtime.evaluate` 先读 4 个备份变量的 computed value：
 var accentAlt = (theme.colors && theme.colors.accentAlt) || "#b45cff";
 ```
 
-**改为**：用 §4.3 读到的 `accent` RGB 元组拼成 `#RRGGBB`（或直接用 hex），硬编码兜底 `#b45cff` 保留（防
-备份变量机制失效）。sparkle 辉光自动跟随主题 accent。
+**改为**：直接在 CSS 里写 `var(--color-brand)`（spike 验过 hex 值，不需 color-mix——sparkle 辉光是完全
+不透明的 box-shadow）。硬编码兜底 `#b45cff` 保留（防 ZCode 升级改了变量名）。具体在 `renderSkinChromeCss`
+里：`box-shadow: 0 0 8px 2px var(--color-brand, #b45cff)`。CSS 引擎取不到 var 时自动用 fallback。
 
 ### 4.5 选择器（保持不变）
 
@@ -290,18 +298,22 @@ AGENTS.md「核心教训 2」记录：侧边栏有一块实色深色背景是 ZC
 保留 `control.js` 每 2s 调 `renderSkinPanel()` + `listSignature()` diff（避免重建 DOM 清用户输入）。签名
 函数要加上新字段（blur 值）。
 
-## 6. `wallpaper.css` 连锁修改
+## 6. ~~wallpaper.css 连锁修改~~（2026-07-17 spike 后废弃）
 
-### 6.1 改动
+**原方案**（已废弃）：在 wallpaper.css 顶部加备份声明 `--zcode-wp-orig-bg: var(--color-background)`。
 
-1. 文件**最顶部**加 4 行备份声明（§3.2）。
-2. **保留**所有 transparent 覆盖不变。
+**新方案**（§3.3 color-mix）：**wallpaper.css 完全不改**。
 
-### 6.2 overlay 未启用时的行为
+spike 失败证明备份机制不成立（CSS 自定义属性按引用延迟解析）。新方案绕开这个坑——直接在注入的
+`<style>` 里用 `color-mix(in srgb, var(--color-neutral-900) N%, transparent)` 读原生底层变量
+（`--color-neutral-*`、`--color-input`、`--color-brand` 都没被 wallpaper.css 覆盖），完全不需要改
+wallpaper.css。这是新方案的最大优势之一：少改一个文件、少一个组件边界、少一份漂移风险。
+
+### 6.1 overlay 未启用时的行为
 
 overlay 关闭时，壁纸满强度透出（与当前一致），向后兼容。overlay 启用时由皮肤系统注入的磨砂层接管。
 
-### 6.3 与视频壁纸的兼容
+### 6.2 与视频壁纸的兼容
 
 视频壁纸层在 body，磨砂层在面板（`backdrop-filter` 模糊面板后面的内容，包括视频）。机制相同，无需特殊
 处理。spec §8.4 列为真机验证项。
@@ -327,40 +339,33 @@ overlay 关闭时，壁纸满强度透出（与当前一致），向后兼容。
 
 ## 8. 测试策略与真机验证清单
 
-### 8.1 实施 spike（第一步，必跑）
+### 8.1 ~~备份变量 spike~~（已完成，2026-07-17）
 
-**验证 CSS 自定义属性备份机制是否成立**：
+原 spike 验证 CSS 自定义属性备份机制 → **失败**（详见 §3.2）。但 spike 顺带挖出新方案所需的真机数据：
+- 原生底层变量未被覆盖（`--color-neutral-*`、`--color-input`、`--color-brand` 都有真色值）
+- `color-mix(in srgb, var(--x) N%, transparent)` 在 ZCode Chromium 完美工作（§3.3 已验）
 
-```bash
-# 改一版 scripts/inspect-skin2.cjs（或临时脚本）
-# 注入含备份声明的 wallpaper.css → 读 computed value
-node -e "
-const cdp = require('./lib/cdp.cjs');
-// 连 page target → Runtime.evaluate:
-//   getComputedStyle(document.documentElement).getPropertyValue('--zcode-wp-orig-bg')
-// 期望: 真主题色（如 'rgb(18, 18, 22)' 或 '#121216'），不是 'transparent'
-"
-```
-
-**失败处理**：若读到 transparent，回退 §3.5（硬编码映射表），需重新与用户确认。
+**新方案实施前不必再 spike**——color-mix 方案的核心机制已真机验过。后续 task 直接基于 §3.4 的变量映射实现。
 
 ### 8.2 单测改动
 
-- `test/skintest.cjs`（若存在）或对应测试文件：重写覆盖新 `makeOverlay`/`makeTheme` 字段集
-- 新增 `buildBlurRule(region, opacity, blur)` 纯函数测试（输入区域名 + 两个值，输出 CSS 规则字符串）
-- 新增备份变量名常量镜像测试（防 `wallpaper.css` 和 `skin-inject.cjs` 漂移，教训 17 同型）
-- 删除：所有针对 `COLOR_KEYS` / `hexToRgba` / 旧 colors 字段的断言
+- `test/skintest.cjs`：重写覆盖新 `makeOverlay`/`makeSkinTheme` 字段集（删 colors、加 blur）
+- 新增 `buildFrostRule(region, opacity, blur)` 纯函数测试（输入区域名 + 两个值，输出 CSS 规则字符串，
+  断言含 `color-mix`、`var(--color-...)`、`backdrop-filter:blur`）
+- 新增底层变量名 + 区域选择器常量镜像测试（防 `skin-selectors.cjs` 和 `skin-inject.cjs` 漂移，教训 17 同型）
+- 删除：所有针对 `COLOR_KEYS` / 旧 colors 字段的断言
 
 ### 8.3 真机验证清单（CSS 层是单测盲区，教训 12/21）
 
-1. **备份变量机制**（§8.1）—— spike 第一步
+1. **~~备份变量机制~~**（§8.1，已完成，废弃）
 2. **overlay 启用时**：面板/输入框/侧栏呈磨砂玻璃，壁纸从后面透出且被模糊
 3. **overlay 关闭时**：完全透明（壁纸满强度透出），与当前行为一致
 4. **拖滑块实时生效**：透明度 0→100、模糊度 0→30 视觉连续变化
-5. **切主题时**：磨砂层底色自动跟随（深色主题深灰磨砂、浅色主题白磨砂）
-6. **sparkle 辉光**：跟随主题 accent，不再固定紫色
+5. **切主题时**：磨砂层底色自动跟随（深色主题深灰磨砂、浅色主题白磨砂）—— **这是新方案的核心卖点**，
+   必须验
+6. **sparkle 辉光**：跟随主题 accent（`var(--color-brand)`），不再固定紫色
 7. **装饰层不受影响**：sparkle 闪烁、emoji 角标位置正常
-8. **视频壁纸叠加**：overlay 在视频壁纸上也正常（§6.3）
+8. **视频壁纸叠加**：overlay 在视频壁纸上也正常（§6.2）
 9. **新用户首次打开**：只看到磨砂玻璃效果（overlay 默认开、装饰层默认关），画面干净
 10. **旧 localStorage 数据兼容**：之前存过带 colors 的主题，读取时不报错、字段自动归一化
 
@@ -385,24 +390,31 @@ const cdp = require('./lib/cdp.cjs');
    `#sidebar, aside.h-full` 命中范围。与现状一致，不恶化。
 2. **`backdrop-filter` 性能**：模糊是大开销 GPU 操作。低端机 / 大屏 + 高 blur 值可能掉帧。本次不优化，
    用户可自主调低 blur。记录为已知遗留。
-3. **备份变量机制依赖 CSS 级联求值时机**（§3.3）：理论成立但需真机验。失败回退见 §3.5。
-4. **主题色变量名假设**：本设计假设 ZCode 用 `--color-background` / `--color-background-alt` /
-   `--color-input` / `--color-brand` 这 4 个变量名（来源 `lib/skin-selectors.cjs:15-37`）。
-   若 ZCode 升级后改名，备份会失效（读到空 → 走 fallback hex）。**spec §8.1 spike 同时验变量名是否
-   还有值**。
+3. **`color-mix` / `backdrop-filter` 的 Chromium 版本依赖**：要求 Chromium 111+（color-mix）和
+   Chromium 76+（backdrop-filter）。ZCode 当前是 Chrome 146（Electron 41），远超要求。若未来 ZCode
+   降级到旧 Chromium（不太可能），这两个功能会失效。
+4. **ZCode 主题变量名假设**：本设计依赖 ZCode 暴露 `--color-neutral-900` / `--color-neutral-950` /
+   `--color-input` / `--color-brand` 这 4 个变量名（spike 2026-07-17 真机验过它们存在且有值）。
+   若 ZCode 升级改名，`var()` 解析失败 → 元素无背景色。这是 SPI（真机接口），升级 ZCode 要重跑
+   `scripts/inspect-skin2.cjs` 复验。`var(..., fallback)` 语法可加 hex 兜底防崩溃，但兜底色不会跟随
+   主题。
 5. **`font` / `radius` 字段保留**：这两个字段在 `skin-view.js` 的「基本信息」`<details>` 区块里
    （line 132-136，`data-field` 属性），与「颜色 (9)」`<details>`（COLOR_KEYS 主色面板，line 137-145）
    是平级兄弟节点。删主色面板不会连带删它们。本次保留不动，live-preview 的 `data-field` 触发分支
    （line 455-456）也照常工作。
+6. **color-mix 输出格式**：spike 显示 ZCode Chromium 输出 `color(srgb R G B / A)` 而不是 `rgba(R,G,B,A)`。
+   两种格式都是合法 CSS 颜色，浏览器都接受，但若有其他 CSS 工具/规则按 `rgba(...)` 字面匹配会读不到。
+   本设计内用——磨砂层背景由我们自己注入的 `<style>` 控制，无外部匹配，无影响。
 
-## 11. 实施顺序（给 writing-plans 的提示）
+## 11. 实施顺序（给 writing-plans 的提示，2026-07-17 spike 后修订）
 
-1. **Spike**（§8.1）：先验备份变量机制。失败则停下来与用户确认回退方案。
-2. **wallpaper.css 改动**（§6）：加备份声明。
-3. **后端模型层**（§7.3）：`skin.cjs` 字段集更新 + `skin-inject.cjs` 重写 `renderSkinCss`。
+1. ~~Spike~~（已完成，§8.1）：备份变量机制失败，新方案是 color-mix（已验）。
+2. ~~wallpaper.css 改动~~（已废弃，§6）：新方案不改 wallpaper.css。
+3. **后端模型层**（§7.3）：`skin.cjs` 字段集更新 + `skin-inject.cjs` 重写 `renderSkinCss`（用 color-mix）+
+   `skin-selectors.cjs` 加原生变量名映射。
 4. **前端 UI**（§5）：删主色面板、改 overlay 双滑块、改默认主题。
 5. **测试**（§8.2）：单测改写 + 新增。
-6. **真机验证**（§8.3）：逐项跑清单。
+6. **真机验证**（§8.3）：逐项跑清单（重点是 §8.3-5「切主题时跟随」）。
 7. **回归**（§8.4）：`npm test` 全绿。
 
 ## 12. 不做的事（YAGNI）
