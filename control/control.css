@@ -198,14 +198,16 @@ body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: bo
   margin-bottom: var(--space-2); }
 .inline-row { display: inline-flex; align-items: center; gap: var(--space-1); margin: 2px; font-size: var(--fs-sm); }
 .rotate-section { border: 1px solid var(--glass-border); border-radius: var(--radius-control); padding: var(--space-2) var(--space-3); margin: 0; }
-.rotate-section legend { font-size: var(--fs-sm); color: var(--text-secondary); padding: 0 var(--space-1); }
 
 /* ---- job-msg toast（spec §7.5） ---- */
-.toast { display: none; padding: 6px 12px; margin: 0 0 var(--space-2) 0;
+.toast { padding: 6px 12px; margin: 0 0 var(--space-2) 0;
   border-radius: var(--radius-control); background: rgba(10, 132, 255, 0.15);
   color: var(--text-primary); font-size: var(--fs-sm);
-  opacity: 0; transition: opacity 200ms ease; }
-.toast.show { display: block; opacity: 1; }
+  opacity: 0; visibility: hidden; transition: opacity 200ms ease, visibility 200ms ease;
+  /* hidden state collapses the bar so it takes no space */
+  height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; overflow: hidden; }
+.toast.show { opacity: 1; visibility: visible;
+  height: auto; padding-top: 6px; padding-bottom: 6px; margin-bottom: var(--space-2); }
 .toast.ok { background: rgba(48, 209, 88, 0.15); }
 .toast.err { background: rgba(255, 69, 58, 0.15); }
 .toast-inline { font-size: var(--fs-sm); display: inline-block; margin-top: var(--space-1); }
