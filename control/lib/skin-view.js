@@ -421,6 +421,49 @@
         renderEditor(currentState());
       }
     });
+
+    // ---- LIVE PREVIEW ----
+    // While the user drags an opacity slider / picks a color in the overlay or
+    // main color section, immediately apply the in-progress theme to ZCode so
+    // they see the effect without clicking save+apply. Debounced 250ms so a
+    // drag doesn't flood the server with requests.
+    // Triggers: data-ov-op (overlay opacity), data-ov-ck / data-ov-ck-text
+    // (overlay colors), data-ck / data-ck-text (main colors), data-field
+    // (font/radius/brand/sparkle/emojiPosition). Uses `input` event (fires
+    // continuously during slider drag) for range/color, `change` for text.
+    panel.addEventListener("input", function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) return;
+      var interesting = t.getAttribute("data-ov-op") || t.getAttribute("data-ov-ck") ||
+        t.getAttribute("data-ck") || t.getAttribute("data-field");
+      if (!interesting) return;
+      scheduleLivePreview();
+    });
+    // also live-preview on overlay enable toggle + emoji position change
+    panel.addEventListener("change", function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) return;
+      if (t.getAttribute("data-ov-field") === "enabled" ||
+          t.getAttribute("data-emoji-field") === "position") {
+        scheduleLivePreview();
+      }
+    });
+  }
+
+  // Debounced live preview. Collects current editor state into `editing`,
+  // then POSTs applySkin with that theme. Errors are non-fatal (e.g. no ZCode).
+  var livePreviewTimer = null;
+  function scheduleLivePreview() {
+    if (livePreviewTimer) clearTimeout(livePreviewTimer);
+    livePreviewTimer = setTimeout(function () {
+      livePreviewTimer = null;
+      var collected = collectEditor();
+      if (!collected) return;
+      // skip if invalid (avoid spamming applySkin with broken themes)
+      var v = skin.validateTheme(collected);
+      if (!v.ok) return;
+      dispatchSkinAction("applySkin", { theme: collected }).catch(function () {});
+    }, 250);
   }
 
   // helper: reuse control.js dispatchAction via fetch directly (avoids coupling)
