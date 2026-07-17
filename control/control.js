@@ -37,9 +37,21 @@
     var el = document.getElementById("status-panel");
     if (el) el.innerHTML = html;
   }
-  function setJobMsg(text) {
+  // job-msg toast（spec §7.5）：成功/失败 2.5s 淡出，执行中持续显示。
+  var jobMsgTimer = null;
+  function setJobMsg(text, kind) {
     var el = document.getElementById("job-msg");
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.className = "toast show" + (kind ? " " + kind : "");
+    if (jobMsgTimer) { clearTimeout(jobMsgTimer); jobMsgTimer = null; }
+    // 执行中（kind 为空或 "执行中"文案）不自动消失，等下一次 setJobMsg 覆盖
+    if (kind === "ok" || kind === "err") {
+      jobMsgTimer = setTimeout(function () {
+        el.className = "toast" + (kind ? " " + kind : "");
+        jobMsgTimer = null;
+      }, 2500);
+    }
   }
 
   // poll status; disable CDP buttons when debug port down
@@ -110,17 +122,17 @@
       params = {};
     }
     dispatchAction(finalAction, params).then(function (res) {
-      if (res.status === 409) setJobMsg("忙，请等当前动作完成");
-      else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""));
+      if (res.status === 409) setJobMsg("忙，请等当前动作完成", "err");
+      else if (!res.json.accepted) setJobMsg("拒绝: " + (res.json.error || ""), "err");
       else {
         // mute/unmute return {accepted, affected, muted} not {jobId}; show a
         // sensible message for both shapes.
-        if (res.json.jobId) setJobMsg("已提交 (" + res.json.jobId + ")");
-        else if (typeof res.json.muted === "boolean") setJobMsg(res.json.muted ? "已静音（" + res.json.affected + "/" + res.json.total + " 窗口）" : "已取消静音（" + res.json.affected + "/" + res.json.total + " 窗口）");
-        else setJobMsg("已提交");
+        if (res.json.jobId) setJobMsg("已提交 (" + res.json.jobId + ")", "ok");
+        else if (typeof res.json.muted === "boolean") setJobMsg(res.json.muted ? "已静音（" + res.json.affected + "/" + res.json.total + " 窗口）" : "已取消静音（" + res.json.affected + "/" + res.json.total + " 窗口）", "ok");
+        else setJobMsg("已提交", "ok");
         setTimeout(poll, 500);
       }
-    }).catch(function (err) { setJobMsg("错误: " + err.message); });
+    }).catch(function (err) { setJobMsg("错误: " + err.message, "err"); });
   });
 
   document.getElementById("open-reader").addEventListener("click", function () {

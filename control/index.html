@@ -19,23 +19,33 @@
     <section class="tab-pane" data-pane="wallpaper">
       <div id="job-msg" class="toast"></div>
       <div id="actions" class="panel">
-        <button data-action="injectImage">注入图片壁纸</button>
-        <button data-action="injectVideo">注入视频壁纸</button>
+      <div class="action-group">
+        <div class="group-title">壁纸操作</div>
+        <button class="primary" data-action="injectImage">注入图片壁纸</button>
+        <button class="primary" data-action="injectVideo">注入视频壁纸</button>
         <button data-action="muteVideo">🔇 静音</button>
         <button data-action="unmuteVideo">🔊 取消静音</button>
-        <button data-action="remove">移除壁纸</button>
-        <label>透明度 <input id="opacity" type="number" min="0" max="100" value="78">%
-          <button data-action="setTransparent">设透明</button></label>
+        <button class="danger" data-action="remove">移除壁纸</button>
+      </div>
+      <div class="action-group">
+        <div class="group-title">窗口透明</div>
+        <label class="inline-row">透明度 <input id="opacity" type="number" min="0" max="100" value="78">% <button data-action="setTransparent">设透明</button></label>
+      </div>
+      <div class="action-group">
+        <div class="group-title">壁纸轮播</div>
+        <fieldset class="rotate-section">
+          <label class="inline-row"><input type="radio" name="rotate-mode" value="image" checked> 图片</label>
+          <label class="inline-row"><input type="radio" name="rotate-mode" value="video"> 视频</label>
+          <label class="inline-row">间隔 <input id="rotate-interval" type="number" min="1" value="5"> 分钟</label>
+          <button class="primary" data-action="startRotate">开始轮播</button>
+          <button class="danger" data-action="stopRotate">停止轮播</button>
+        </fieldset>
+      </div>
+      <div class="action-group">
+        <div class="group-title">维护</div>
         <button data-action="resize">重新缩图</button>
         <button data-action="setup">重装依赖</button>
-        <fieldset class="rotate-section">
-          <legend>壁纸轮播</legend>
-          <label><input type="radio" name="rotate-mode" value="image" checked> 图片</label>
-          <label><input type="radio" name="rotate-mode" value="video"> 视频</label>
-          <label>间隔 <input id="rotate-interval" type="number" min="1" value="5"> 分钟</label>
-          <button data-action="startRotate">开始轮播</button>
-          <button data-action="stopRotate">停止轮播</button>
-        </fieldset>
+      </div>
       </div>
     </section>
     <section class="tab-pane" data-pane="reader">
