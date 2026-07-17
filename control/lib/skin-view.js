@@ -139,7 +139,6 @@
       '<label class="skin-row">字体 <input type="text" data-field="font" value="' + esc(editing.font || "") + '" placeholder="留空=不覆盖"></label>' +
       '<label class="skin-row">圆角(px) <input type="number" data-field="radius" value="' + (editing.radius != null ? editing.radius : "") + '" placeholder="留空=不覆盖" min="0"></label>' +
       '<div class="skin-deco">' +
-        '<label class="skin-row">品牌文字 <input type="text" data-field="brand" value="' + esc((editing.decorations && editing.decorations.brand) || "") + '" placeholder="留空=不显示"></label>' +
         '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
         '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
         '<div id="skin-emoji-rows">' + renderEmojiRows(editing) + '</div>' +
@@ -202,7 +201,6 @@
     var rad = (ed.querySelector('[data-field="radius"]') || {}).value;
     editing.radius = (rad === "" || rad == null) ? null : Number(rad);
     editing.decorations = editing.decorations || {};
-    editing.decorations.brand = ((ed.querySelector('[data-field="brand"]') || {}).value || "").trim() || null;
     editing.decorations.sparkle = !!(ed.querySelector('[data-field="sparkle"]') || {}).checked;
     // emojiBadges: collect each row (emoji + position). Rows are identified by
     // data-emoji-idx; read in DOM order so the array matches what the user sees.

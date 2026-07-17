@@ -63,7 +63,6 @@ check("colors all null by default", t.colors.background === null && t.colors.acc
 check("font null by default", t.font === null);
 check("radius null by default", t.radius === null);
 check("sparkle defaults true", t.decorations.sparkle === true);
-check("brand null by default", t.decorations.brand === null);
 check("emojiBadges empty array by default", Array.isArray(t.decorations.emojiBadges) && t.decorations.emojiBadges.length === 0);
 // radius numeric coercion
 check("radius coerced to number", skin.makeSkinTheme({ radius: "16" }).radius === 16);

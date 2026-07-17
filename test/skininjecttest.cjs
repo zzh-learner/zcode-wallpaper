@@ -35,13 +35,13 @@ check("radius skipped when null", cssNoRad.indexOf("border-radius:") < 0);
 
 // === renderSkinChrome: decorations ===
 // array form (new): multiple badges at different positions
-var chrome = si.renderSkinChrome({ decorations: { brand: "我的皮肤", sparkle: true, emojiBadges: [
+var chrome = si.renderSkinChrome({ decorations: { sparkle: true, emojiBadges: [
   { emoji: "♡", position: "top-right" },
   { emoji: "✦", position: "bottom-center" },
   { emoji: "🎀", position: "middle-left" }
 ] } });
-check("brand rendered", chrome.indexOf("我的皮肤") >= 0 && chrome.indexOf("skin-brand") >= 0);
 check("6 sparkle particles", (chrome.match(/<i><\/i>/g) || []).length === 6);
+check("no skin-brand rendered (brand removed)", chrome.indexOf("skin-brand") < 0);
 check("emoji badge ♡ rendered", chrome.indexOf("♡") >= 0 && chrome.indexOf("skin-emoji-badge") >= 0);
 check("emoji ✦ rendered (2nd badge)", chrome.indexOf("✦") >= 0);
 check("emoji 🎀 rendered (3rd badge)", chrome.indexOf("🎀") >= 0);
@@ -67,7 +67,8 @@ check("empty decorations -> empty chrome", chromeEmpty === "");
 var chromeCss = si.renderSkinChromeCss({ colors: { accent: "#abc", accentAlt: "#def" } });
 check("chrome wrapper pointer-events none", chromeCss.indexOf("pointer-events: none") >= 0);
 check("chrome wrapper z-index", chromeCss.indexOf("z-index: 31") >= 0);
-check("chrome uses accent color", chromeCss.indexOf("#abc") >= 0);
+check("chrome uses accentAlt color (sparkle glow)", chromeCss.indexOf("#def") >= 0);
+check("chrome no longer references accent (brand removed)", chromeCss.indexOf("#abc") < 0);
 check("chrome css has all 8 position classes", ["top-left","top-center","top-right","middle-left","middle-right","bottom-left","bottom-center","bottom-right"].every(function(p){return chromeCss.indexOf("skin-emoji-"+p)>=0}));
 
 // === buildSkinExpression: structure ===
