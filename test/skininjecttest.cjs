@@ -86,12 +86,20 @@ check("sparkleCount=100 clamps to 50", (si.renderSkinChrome({ decorations: { spa
 var css20 = si.renderSkinChromeCss({ decorations: { sparkle: true, sparkleCount: 20 }, colors: {} });
 check("20 particles -> 20 nth-child position rules", (css20.match(/nth-child\(/g) || []).length === 20);
 check("position rule 15 exists", css20.indexOf("nth-child(15)") >= 0);
-check("position rule has left+top+animation-delay", /nth-child\(1\) { left: [\d.]+%; top: [\d.]+%; animation-delay: [\d.]+s; }/.test(css20));
-// twinkle animation: keyframes + per-particle animation on .skin-sparkles i
+check("position rule has left+top", /nth-child\(1\) {[\s\S]*left: [\d.]+%[\s\S]*top: [\d.]+%/.test(css20));
+// twinkle + float: dual animation. twinkle is shared; float is per-particle.
 check("twinkle keyframes present", css20.indexOf("@keyframes skin-twinkle") >= 0);
-check("sparkle i has twinkle animation", css20.indexOf("animation: skin-twinkle") >= 0);
+check("float keyframes per particle", css20.indexOf("@keyframes skin-float-0") >= 0 && css20.indexOf("@keyframes skin-float-15") >= 0);
+check("20 float keyframes generated", (css20.match(/@keyframes skin-float-\d+/g) || []).length === 20);
+check("particle has dual animation (twinkle + float)", /animation: skin-twinkle[\s\S]*skin-float-\d+/.test(css20));
+check("float uses translate drift", css20.indexOf("transform: translate(") >= 0);
 check("reduced-motion guard present", css20.indexOf("prefers-reduced-motion") >= 0);
-check("per-particle delay differs", /animation-delay: 0\.00s/.test(css20) && /animation-delay: 0\.37s/.test(css20));
+// randomness: two renders produce different positions (truly random)
+var cssA = si.renderSkinChromeCss({ decorations: { sparkle: true, sparkleCount: 3 }, colors: {} });
+var cssB = si.renderSkinChromeCss({ decorations: { sparkle: true, sparkleCount: 3 }, colors: {} });
+var posA = (cssA.match(/left: ([\d.]+)%; top: ([\d.]+)%/) || []).slice(1).join(",");
+var posB = (cssB.match(/left: ([\d.]+)%; top: ([\d.]+)%/) || []).slice(1).join(",");
+check("two renders differ (truly random positions)", posA !== posB);
 // all null
 var chromeEmpty = si.renderSkinChrome({ decorations: {} });
 check("empty decorations -> empty chrome", chromeEmpty === "");
