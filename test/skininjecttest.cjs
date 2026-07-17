@@ -38,7 +38,8 @@ check("overlay section present", cssOv.indexOf("overlay mode") >= 0);
 check("overlay panel rgba emitted", cssOv.indexOf("rgba(26, 20, 16, 0.85)") >= 0);
 check("overlay input rgba emitted", cssOv.indexOf("rgba(42, 33, 24, 0.9)") >= 0);
 check("overlay sidebar rgba emitted", cssOv.indexOf("rgba(21, 17, 13, 0.8)") >= 0);
-check("overlay targets .bg-surface", cssOv.indexOf(".bg-surface") >= 0);
+check("overlay targets main content area", cssOv.indexOf("main, [role='main']") >= 0);
+check("overlay targets composer region", cssOv.indexOf(".chat-composer-region") >= 0);
 check("overlay targets #sidebar", cssOv.indexOf("#sidebar") >= 0);
 // overlay enabled -> background/panel/sidebarBg tokens SKIPPED (would clash with wallpaper transparent)
 check("overlay skips --color-background token", cssOv.indexOf("--color-background:") < 0);
