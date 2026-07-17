@@ -79,7 +79,7 @@ const rotNull = sv.renderStatus({
 check("render rotate null shows placeholder", rotNull.indexOf("—") !== -1);
 
 // === video wallpaper audio state display (spec §4.6) ===
-// video mode + unmuted -> shows 🔊 有声
+// video mode + unmuted -> shows 有声 (Task 8: SVG replaces emoji; assertion is text-only since Node fallback has no SVG)
 var stV = {
   zcode: { running: true, debugPort: 9222, pageTargets: 1 },
   wallpaper: { mode: "video", videoMuted: false, injectedWindows: 1, totalWindows: 1 },
@@ -89,7 +89,7 @@ var stV = {
 };
 var htmlV = sv.renderStatus(stV);
 check("status-view: video unmuted shows 有声", htmlV.indexOf("有声") !== -1);
-// video mode + muted -> shows 🔇 静音
+// video mode + muted -> shows 静音
 var stM = JSON.parse(JSON.stringify(stV));
 stM.wallpaper.videoMuted = true;
 var htmlM = sv.renderStatus(stM);
