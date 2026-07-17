@@ -237,3 +237,7 @@ body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: bo
 .toast.ok { background: rgba(48, 209, 88, 0.15); }
 .toast.err { background: rgba(255, 69, 58, 0.15); }
 .toast-inline { font-size: var(--fs-sm); display: inline-block; margin-top: var(--space-1); }
+
+/* ---- SVG 图标（spec §10.3） ---- */
+.icon { width: 14px; height: 14px; vertical-align: middle; display: inline-block;
+  margin-right: 2px; }

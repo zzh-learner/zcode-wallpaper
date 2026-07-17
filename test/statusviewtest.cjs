@@ -88,19 +88,19 @@ var stV = {
   rotate: { running: false }, _meta: { probeErrors: [] },
 };
 var htmlV = sv.renderStatus(stV);
-check("status-view: video unmuted shows 🔊 有声", htmlV.indexOf("🔊 有声") !== -1);
+check("status-view: video unmuted shows 有声", htmlV.indexOf("有声") !== -1);
 // video mode + muted -> shows 🔇 静音
 var stM = JSON.parse(JSON.stringify(stV));
 stM.wallpaper.videoMuted = true;
 var htmlM = sv.renderStatus(stM);
-check("status-view: video muted shows 🔇 静音", htmlM.indexOf("🔇 静音") !== -1);
-check("status-view: video muted does NOT show 🔊 有声", htmlM.indexOf("🔊 有声") === -1);
+check("status-view: video muted shows 静音", htmlM.indexOf("静音") !== -1);
+check("status-view: video muted does NOT show 有声", htmlM.indexOf("有声") === -1);
 // image mode -> no audio marker
 var stI = JSON.parse(JSON.stringify(stV));
 stI.wallpaper.mode = "image";
 stI.wallpaper.videoMuted = null;
 var htmlI = sv.renderStatus(stI);
-check("status-view: image mode no audio marker", htmlI.indexOf("🔊 有声") === -1 && htmlI.indexOf("🔇 静音") === -1);
+check("status-view: image mode no audio marker", htmlI.indexOf("有声") === -1 && htmlI.indexOf("静音") === -1);
 
 // === 结构断言（spec §6 行项风格，Task 4 新增） ===
 check("结构: renderStatus 含 status-row", html1.indexOf("status-row") !== -1);

@@ -6,6 +6,11 @@ function esc(s) {
     return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c];
   });
 }
+// 图标（spec §10）：浏览器走 window.__ccIcons，Node 测无 window 时降级文本。
+var ICONS = (typeof window !== "undefined" && window.__ccIcons) ? window.__ccIcons : null;
+function icon(name, fallback) {
+  return ICONS && ICONS[name] ? ICONS[name] : (fallback || "");
+}
 // 渲染单行：label(主文字) + valueHtml(状态，含 .ok/.warn/.err/.muted) + subHtml(次要信息)
 // rowClass 可选：异常行加 warn-row/err-row 弱底高亮。
 function row(label, valueHtml, subHtml, rowClass) {
@@ -35,7 +40,7 @@ function renderStatus(st) {
     wVal = esc(w.mode === "video" ? "视频壁纸" : "图片壁纸");
     wSub = '注入 ' + esc(w.injectedWindows) + '/' + esc(w.totalWindows);
     if (w.mode === "video") {
-      wSub += ' · ' + (w.videoMuted ? '🔇 静音' : '🔊 有声');
+      wSub += ' · ' + (w.videoMuted ? (icon("volumeX") + ' 静音') : (icon("volume") + ' 有声'));
     }
   } else {
     wVal = '<span class="muted">未注入</span>';
@@ -54,7 +59,7 @@ function renderStatus(st) {
   if (res) {
     resVal = '图 ' + esc(res.images) + ' · 缩图 ' + esc(res.thumbs) + ' · 视频 ' + esc(res.videos) + ' · 小说 ' + esc(res.novels);
     var depsOk = res.deps && res.deps.sharp;
-    resSub = '依赖 ' + (depsOk ? '✓' : '✗');
+    resSub = '依赖 ' + (depsOk ? icon("check", "✓") : icon("x", "✗"));
     if (!depsOk) resRow = "err-row";
   } else {
     resVal = '<span class="muted">—</span>';
