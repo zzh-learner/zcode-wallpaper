@@ -60,16 +60,12 @@ html, body { margin: 0; height: 100%; background: transparent !important; color:
   padding: var(--space-3) var(--space-4);
   margin: 0 0 var(--space-3) 0; }
 h3 { margin: 0 0 var(--space-2) 0; font-size: var(--fs-md); font-weight: 600; }
-/* 阅读 Tab 分区标题（spec §8.2）：书架/书签在一个面板内 */
-.reader-section-title { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0; display: flex; align-items: center; justify-content: space-between; }
 /* 保留 .shelf-head 兼容（书架 h3 + 打开阅读器链接） */
 .shelf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
 .shelf-head h3 { margin: 0; }
 .link-btn { background: transparent; border: none; color: var(--accent); padding: 0 4px; margin: 0;
   font-size: var(--fs-sm); text-decoration: none; cursor: pointer; }
 .link-btn:hover { background: transparent; color: var(--accent-hover); text-decoration: underline; }
-.st { padding: 3px 0; }
 button { background: rgba(255, 255, 255, 0.10); color: var(--text-primary);
   border: 1px solid var(--glass-border); border-radius: var(--radius-control);
   padding: 6px 14px; font-size: var(--fs-sm); cursor: pointer; margin: 2px;
