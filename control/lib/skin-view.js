@@ -49,11 +49,11 @@
       '<span class="muted skin-status-text" style="font-size:12px">' + skinStatus + '</span></div>';
     html += '<div class="skin-toolbar">' +
       '<select id="skin-select">' + opts + '</select> ' +
-      '<button data-skin-act="apply">应用</button> ' +
-      '<button data-skin-act="remove">移除</button> ' +
+      '<button class="primary" data-skin-act="apply">应用</button> ' +
+      '<button class="danger" data-skin-act="remove">移除</button> ' +
       '<button data-skin-act="new">新建</button> ' +
       '<button data-skin-act="dup">复制</button> ' +
-      '<button data-skin-act="del">删除</button></div>';
+      '<button class="danger" data-skin-act="del">删除</button></div>';
     html += '<div id="skin-editor"></div>';
     html += '<span id="skin-msg" class="muted"></span>';
     return html;
@@ -126,28 +126,35 @@
         '<input type="text" data-ck-text="' + key + '" value="' + esc(v) + '" placeholder="留空=不覆盖" maxlength="9"></label>';
     }
 
+    var badge = locked ? ' <span class="readonly-badge">预设只读</span>' : '';
     var html = '<fieldset class="skin-edit-fs"' + (locked ? ' disabled title="预设主题只读，点「复制」后编辑副本"' : '') + '>' +
-      '<legend>编辑: ' + esc(t.name) + (locked ? ' [预设只读]' : '') + '</legend>' +
-      '<label class="skin-row">名称 <input type="text" data-field="name" value="' + esc(editing.name) + '"></label>' +
-      '<div class="skin-colors">' +
-        colorRow("background", "背景") + colorRow("panel", "面板") +
-        colorRow("accent", "主色") + colorRow("accentAlt", "次色") +
-        colorRow("text", "文字") + colorRow("muted", "弱文字") +
-        colorRow("sidebarBg", "侧栏") + colorRow("inputBg", "输入框") +
-        colorRow("inputBorder", "输入框边框") +
-      '</div>' +
-      '<label class="skin-row">字体 <input type="text" data-field="font" value="' + esc(editing.font || "") + '" placeholder="留空=不覆盖"></label>' +
-      '<label class="skin-row">圆角(px) <input type="number" data-field="radius" value="' + (editing.radius != null ? editing.radius : "") + '" placeholder="留空=不覆盖" min="0"></label>' +
-      renderOverlaySection(editing) +
-      '<div class="skin-deco">' +
-        '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
-        '<label class="skin-row skin-opacity-row">闪光数量 <input type="range" data-field="sparkleCount" min="0" max="50" value="' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '"><span data-sparkle-count-val>' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '</span></label>' +
-        '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
-        '<div id="skin-emoji-rows">' + renderEmojiRows(editing) + '</div>' +
-        '<button type="button" data-skin-act="addEmojiRow" class="skin-emoji-add">+ 添加角标</button>' +
-      '</div>';
-    if (!locked) html += '<button data-skin-act="save">保存</button>';
-    if (locked) html += '<div class="muted" style="font-size:11px;margin-top:4px">预设主题不可直接编辑。点上方「复制」生成可编辑副本。</div>';
+      '<legend>编辑: ' + esc(t.name) + badge + '</legend>' +
+      '<details open><summary>基本信息</summary>' +
+        '<label class="skin-row">名称 <input type="text" data-field="name" value="' + esc(editing.name) + '"></label>' +
+        '<label class="skin-row">字体 <input type="text" data-field="font" value="' + esc(editing.font || "") + '" placeholder="留空=不覆盖"></label>' +
+        '<label class="skin-row">圆角(px) <input type="number" data-field="radius" value="' + (editing.radius != null ? editing.radius : "") + '" placeholder="留空=不覆盖" min="0"></label>' +
+      '</details>' +
+      '<details open><summary>颜色 (9)</summary>' +
+        '<div class="skin-colors">' +
+          colorRow("background", "背景") + colorRow("panel", "面板") +
+          colorRow("accent", "主色") + colorRow("accentAlt", "次色") +
+          colorRow("text", "文字") + colorRow("muted", "弱文字") +
+          colorRow("sidebarBg", "侧栏") + colorRow("inputBg", "输入框") +
+          colorRow("inputBorder", "输入框边框") +
+        '</div>' +
+      '</details>' +
+      '<details><summary>角标与闪光</summary>' +
+        '<div class="skin-deco">' +
+          '<label class="skin-checkbox"><input type="checkbox" data-field="sparkle"' + (editing.decorations && editing.decorations.sparkle ? " checked" : "") + '> 闪光粒子</label>' +
+          '<label class="skin-row skin-opacity-row">闪光数量 <input type="range" data-field="sparkleCount" min="0" max="50" value="' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '"><span data-sparkle-count-val>' + ((editing.decorations && editing.decorations.sparkleCount != null) ? editing.decorations.sparkleCount : 12) + '</span></label>' +
+          '<div class="skin-emoji-list-head">Emoji 角标（可多个，显示在不同位置）</div>' +
+          '<div id="skin-emoji-rows">' + renderEmojiRows(editing) + '</div>' +
+          '<button type="button" data-skin-act="addEmojiRow" class="skin-emoji-add">+ 添加角标</button>' +
+        '</div>' +
+      '</details>' +
+      renderOverlaySection(editing);
+    if (!locked) html += '<button class="primary" data-skin-act="save">保存</button>';
+    if (locked) html += '<div class="muted skin-readonly-hint">预设主题不可直接编辑。点上方「复制」生成可编辑副本。</div>';
     html += '</fieldset>';
     ed.innerHTML = html;
   }
