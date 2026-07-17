@@ -17,54 +17,49 @@ check("OVERLAY_REGION_SELECTORS.panel", sel.OVERLAY_REGION_SELECTORS.panel.index
 check("OVERLAY_REGION_SELECTORS.input", sel.OVERLAY_REGION_SELECTORS.input.indexOf(".bg-input") >= 0);
 check("OVERLAY_REGION_SELECTORS.sidebar", sel.OVERLAY_REGION_SELECTORS.sidebar.indexOf("#sidebar") >= 0);
 
-// TODO Task 5: 旧 renderSkinCss 断言段临时注释（Task 4 color-mix 方案；Task 5 改完 renderSkinCss 后恢复）
-/*
-// === renderSkinCss: token overrides ===
-var css = si.renderSkinCss({ name: "t", colors: { accent: "#8b3dce", background: "#fff" } });
-check("css has accent token", css.indexOf("--color-brand: #8b3dce") >= 0 || css.indexOf("--color-primary: #8b3dce") >= 0);
-check("css has background token", css.indexOf("--color-background: #fff") >= 0);
-check("css has !important", css.indexOf("!important") >= 0);
-check("css targets theme roots", css.indexOf(".theme-zai-dark, .theme-zai-light") >= 0);
+// === renderSkinCss: 磨砂玻璃新形状（Task 5，color-mix 方案）===
+var cssFrost = si.renderSkinCss({
+  name: "磨砂测试",
+  overlay: { enabled: true, panelOpacity: 70, panelBlur: 12, inputOpacity: 70, inputBlur: 12, sidebarOpacity: 70, sidebarBlur: 12 }
+});
+check("frost overlay section present", cssFrost.indexOf("frosted glass") >= 0 || cssFrost.indexOf("overlay") >= 0);
+// 面板：color-mix + var(--color-neutral-900) + 70%
+check("frost panel color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-900) 70%, transparent)") >= 0);
+check("frost panel backdrop-filter blur 12px", cssFrost.indexOf("backdrop-filter: blur(12px)") >= 0);
+check("frost has webkit prefix", cssFrost.indexOf("-webkit-backdrop-filter") >= 0);
+// 输入框：var(--color-input)
+check("frost input color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-input)") >= 0);
+// 侧栏：var(--color-neutral-950)
+check("frost sidebar color-mix", cssFrost.indexOf("color-mix(in srgb, var(--color-neutral-950)") >= 0);
+// 选择器
+check("frost targets main", cssFrost.indexOf("main, [role='main']") >= 0);
+check("frost targets .bg-input", cssFrost.indexOf(".bg-input") >= 0);
+check("frost targets #sidebar", cssFrost.indexOf("#sidebar") >= 0);
+// 没有旧 rgba(...) 字面量（color-mix 应取代）
+check("frost has no literal rgba()", cssFrost.indexOf("rgba(") < 0);
+// 没有 readBackupVarsExpression 胶水（方案已简化）
+check("no readBackupVarsExpression export", si.readBackupVarsExpression === undefined);
+check("no parseBackupVarsResult export", si.parseBackupVarsResult === undefined);
 
-// === renderSkinCss: null colors skipped ===
-var cssNull = si.renderSkinCss({ name: "t", colors: { accent: null, background: "" } });
-check("null accent not emitted", cssNull.indexOf("--color-brand:") < 0);
-check("empty background not emitted", cssNull.indexOf("--color-background:") < 0);
+// overlay 关闭：不输出磨砂规则
+var cssNoFrost = si.renderSkinCss({
+  name: "关闭测试",
+  overlay: { enabled: false, panelOpacity: 70, panelBlur: 12, inputOpacity: 70, inputBlur: 12, sidebarOpacity: 70, sidebarBlur: 12 }
+});
+check("no frost when disabled", cssNoFrost.indexOf("backdrop-filter") < 0);
+check("no color-mix when disabled", cssNoFrost.indexOf("color-mix") < 0);
 
-// === renderSkinCss: font override only when set ===
-var cssFont = si.renderSkinCss({ name: "t", colors: {}, font: "Microsoft YaHei" });
-check("font emitted when set", cssFont.indexOf("font-family:") >= 0 && cssFont.indexOf("Microsoft YaHei") >= 0);
-var cssNoFont = si.renderSkinCss({ name: "t", colors: {}, font: null });
-check("font skipped when null", cssNoFont.indexOf("font-family:") < 0);
-var cssEmptyFont = si.renderSkinCss({ name: "t", colors: {}, font: "" });
-check("font skipped when empty", cssEmptyFont.indexOf("font-family:") < 0);
-
-// === renderSkinCss: radius override ===
-var cssRad = si.renderSkinCss({ name: "t", colors: {}, radius: 20 });
-check("radius emitted", cssRad.indexOf("border-radius: 20px") >= 0);
-check("radius targets .bg-input", cssRad.indexOf(".bg-input") >= 0);
-var cssNoRad = si.renderSkinCss({ name: "t", colors: {}, radius: null });
-
-// === renderSkinCss: overlay mode (wallpaper coexistence) ===
-var cssOv = si.renderSkinCss({ name: "t", colors: { accent: "#abc" }, overlay: { enabled: true, panelBg: "#1a1410", panelOpacity: 85, inputBg: "#2a2118", inputOpacity: 90, sidebarBg: "#15110d", sidebarOpacity: 80 } });
-check("overlay section present", cssOv.indexOf("overlay mode") >= 0);
-check("overlay panel rgba emitted", cssOv.indexOf("rgba(26, 20, 16, 0.85)") >= 0);
-check("overlay input rgba emitted", cssOv.indexOf("rgba(42, 33, 24, 0.9)") >= 0);
-check("overlay sidebar rgba emitted", cssOv.indexOf("rgba(21, 17, 13, 0.8)") >= 0);
-check("overlay targets main content area", cssOv.indexOf("main, [role='main']") >= 0);
-check("overlay targets composer region", cssOv.indexOf(".chat-composer-region") >= 0);
-check("overlay targets #sidebar", cssOv.indexOf("#sidebar") >= 0);
-// overlay enabled -> background/panel/sidebarBg tokens SKIPPED (would clash with wallpaper transparent)
-check("overlay skips --color-background token", cssOv.indexOf("--color-background:") < 0);
-check("overlay still emits accent token", cssOv.indexOf("--color-brand:") >= 0 || cssOv.indexOf("--color-primary:") >= 0);
-// overlay disabled -> no rgba, normal token path
-var cssNoOv = si.renderSkinCss({ name: "t", colors: { background: "#fff" }, overlay: { enabled: false } });
-check("overlay disabled -> no rgba section", cssNoOv.indexOf("overlay mode") < 0);
-check("overlay disabled -> background token present", cssNoOv.indexOf("--color-background: #fff") >= 0);
-
-check("radius skipped when null", cssNoRad.indexOf("border-radius:") < 0);
-*/
-// TODO Task 5 end
+// 不同 opacity/blur 值正确反映
+var cssCustom = si.renderSkinCss({
+  name: "custom",
+  overlay: { enabled: true, panelOpacity: 50, panelBlur: 5, inputOpacity: 80, inputBlur: 0, sidebarOpacity: 30, sidebarBlur: 20 }
+});
+check("custom panel opacity 50%", cssCustom.indexOf("var(--color-neutral-900) 50%, transparent)") >= 0);
+check("custom panel blur 5px", cssCustom.indexOf("blur(5px)") >= 0);
+check("custom input opacity 80%", cssCustom.indexOf("var(--color-input) 80%, transparent)") >= 0);
+// blur=0 的区域：可以省略 backdrop-filter（无意义 GPU 开销）
+// sidebar blur=20
+check("custom sidebar blur 20px", cssCustom.indexOf("blur(20px)") >= 0);
 
 // === renderSkinChrome: decorations ===
 // array form (new): multiple badges at different positions
@@ -123,7 +118,9 @@ check("empty decorations -> empty chrome", chromeEmpty === "");
 var chromeCss = si.renderSkinChromeCss({ colors: { accent: "#abc", accentAlt: "#def" } });
 check("chrome wrapper pointer-events none", chromeCss.indexOf("pointer-events: none") >= 0);
 check("chrome wrapper z-index", chromeCss.indexOf("z-index: 31") >= 0);
-check("chrome uses accentAlt color (sparkle glow)", chromeCss.indexOf("#def") >= 0);
+// Task 5: sparkle glow follows ZCode --color-brand via color var with hex fallback
+check("chrome uses var(--color-brand) for sparkle glow", chromeCss.indexOf("var(--color-brand, #b45cff)") >= 0);
+check("chrome no longer references accentAlt hex (theme-follow)", chromeCss.indexOf("#def") < 0);
 check("chrome no longer references accent (brand removed)", chromeCss.indexOf("#abc") < 0);
 check("chrome css has all 8 position classes", ["top-left","top-center","top-right","middle-left","middle-right","bottom-left","bottom-center","bottom-right"].every(function(p){return chromeCss.indexOf("skin-emoji-"+p)>=0}));
 
