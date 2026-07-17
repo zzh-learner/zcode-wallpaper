@@ -203,5 +203,11 @@ check("mirror: BLUR_RANGE 一致", JSON.stringify(skin.BLUR_RANGE) === JSON.stri
 check("mirror: COLOR_KEYS 两边都 undefined", skin.COLOR_KEYS === undefined && skinWeb.COLOR_KEYS === undefined);
 check("mirror: makeOverlay 相同输入同输出", JSON.stringify(skin.makeOverlay({ panelOpacity: 50, panelBlur: 5 })) === JSON.stringify(skinWeb.makeOverlay({ panelOpacity: 50, panelBlur: 5 })));
 
+// mirror: validateTheme 校验逻辑一致（drift regression）
+check("mirror: reject non-string font", JSON.stringify(skin.validateTheme({name:"x", font:42})) === JSON.stringify(skinWeb.validateTheme({name:"x", font:42})));
+check("mirror: reject non-object overlay", JSON.stringify(skin.validateTheme({name:"x", overlay:"bad"})) === JSON.stringify(skinWeb.validateTheme({name:"x", overlay:"bad"})));
+check("mirror: reject non-object decorations", JSON.stringify(skin.validateTheme({name:"x", decorations:"bad"})) === JSON.stringify(skinWeb.validateTheme({name:"x", decorations:"bad"})));
+check("mirror: reject legacy emojiPosition", JSON.stringify(skin.validateTheme({name:"x", decorations:{emojiBadge:"♡", emojiPosition:"middle"}})) === JSON.stringify(skinWeb.validateTheme({name:"x", decorations:{emojiBadge:"♡", emojiPosition:"middle"}})));
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

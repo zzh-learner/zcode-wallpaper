@@ -91,25 +91,49 @@ var skinModel = (function () {
     validateTheme: function (t) {
       var errors = [];
       if (!t || typeof t !== "object") return { ok: false, errors: ["theme is not an object"] };
-      if (!t.name || !String(t.name).trim()) errors.push("name 不能为空");
-      if (t.radius != null && t.radius !== "" && (!isFinite(Number(t.radius)) || Number(t.radius) < 0)) errors.push("radius 必须是非负数字");
-      if (t.overlay && typeof t.overlay === "object") {
-        function chk(v, key, min, max) {
-          if (v == null || v === "") return;
-          if (!isFinite(v) || v < min || v > max) errors.push("overlay." + key + " 必须在 " + min + "-" + max);
-        }
-        chk(t.overlay.panelBlur, "panelBlur", BLUR_RANGE.min, BLUR_RANGE.max);
-        chk(t.overlay.inputBlur, "inputBlur", BLUR_RANGE.min, BLUR_RANGE.max);
-        chk(t.overlay.sidebarBlur, "sidebarBlur", BLUR_RANGE.min, BLUR_RANGE.max);
-        chk(t.overlay.panelOpacity, "panelOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
-        chk(t.overlay.inputOpacity, "inputOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
-        chk(t.overlay.sidebarOpacity, "sidebarOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+      if (!t.name || typeof t.name !== "string" || !t.name.trim()) errors.push("name 不能为空");
+      // NOTE: t.colors (legacy) silently ignored, NOT validated.
+      if (t.radius != null && t.radius !== "") {
+        var r = Number(t.radius);
+        if (!isFinite(r) || r < 0) errors.push("radius 必须是非负数字");
       }
-      if (t.decorations && Array.isArray(t.decorations.emojiBadges)) {
-        for (var j = 0; j < t.decorations.emojiBadges.length; j++) {
-          var b = t.decorations.emojiBadges[j];
-          if (b && typeof b === "object" && b.position != null && DECORATION_EMOJI_POSITIONS.indexOf(b.position) === -1) {
-            errors.push("emojiBadges[" + j + "].position 无效");
+      if (t.font != null && t.font !== "" && typeof t.font !== "string") {
+        errors.push("font 必须是字符串");
+      }
+      if (t.overlay) {
+        if (typeof t.overlay !== "object") {
+          errors.push("overlay 必须是对象");
+        } else {
+          function checkRange(v, key, min, max) {
+            if (v == null || v === "") return;
+            if (!isFinite(v) || v < min || v > max) {
+              errors.push("overlay." + key + " 必须在 " + min + "-" + max);
+            }
+          }
+          checkRange(t.overlay.panelBlur, "panelBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.inputBlur, "inputBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.sidebarBlur, "sidebarBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.panelOpacity, "panelOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+          checkRange(t.overlay.inputOpacity, "inputOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+          checkRange(t.overlay.sidebarOpacity, "sidebarOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+        }
+      }
+      if (t.decorations) {
+        if (typeof t.decorations !== "object") {
+          errors.push("decorations 必须是对象");
+        } else {
+          if (Array.isArray(t.decorations.emojiBadges)) {
+            for (var i = 0; i < t.decorations.emojiBadges.length; i++) {
+              var b = t.decorations.emojiBadges[i];
+              if (b && typeof b === "object" && b.position != null &&
+                  DECORATION_EMOJI_POSITIONS.indexOf(b.position) === -1) {
+                errors.push("emojiBadges[" + i + "].position 必须是 " + DECORATION_EMOJI_POSITIONS.join("/") + " 之一");
+              }
+            }
+          }
+          if (t.decorations.emojiBadge != null && t.decorations.emojiBadge !== "" &&
+              DECORATION_EMOJI_POSITIONS.indexOf(t.decorations.emojiPosition) === -1) {
+            errors.push("emojiPosition 必须是 " + DECORATION_EMOJI_POSITIONS.join("/") + " 之一");
           }
         }
       }
