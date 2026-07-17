@@ -11,7 +11,7 @@ function esc(s) {
 function row(label, valueHtml, subHtml, rowClass) {
   return '<div class="status-row' + (rowClass ? " " + rowClass : "") + '">' +
     '<div class="status-main">' +
-      '<span class="status-label">' + label + '</span>' +
+      '<span class="status-label">' + esc(label) + '</span>' +
       '<span class="status-value">' + valueHtml + '</span>' +
     '</div>' +
     (subHtml ? '<div class="status-sub">' + subHtml + '</div>' : '') +

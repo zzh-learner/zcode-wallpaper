@@ -122,6 +122,16 @@ check("结构: 依赖缺失时显示 ✗", htmlDeps.indexOf("✗") !== -1);
 // 6 行（数 status-row 出现次数）
 var rowCount = (html1.match(/status-row/g) || []).length;
 check("结构: 共 6 个 status-row", rowCount === 6);
+// rotate stale + transparent unknown 触发 warn-row（Task 4 review 补断言）
+check("结构: rotate stale 含 warn-row", rotStale.indexOf("warn-row") !== -1);
+var stUnknown = {
+  zcode: { running: true }, wallpaper: { mode: "none" },
+  transparent: { enabled: "unknown" },
+  reader: { running: true }, resources: { images: 0 },
+  _meta: { probeErrors: [] },
+};
+var htmlUnknown = sv.renderStatus(stUnknown);
+check("结构: transparent unknown 含 warn-row", htmlUnknown.indexOf("warn-row") !== -1);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);
