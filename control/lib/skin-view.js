@@ -118,14 +118,6 @@
     editing = JSON.parse(JSON.stringify(t));
     var locked = !!t.isBuiltin;
 
-    var c = editing.colors || {};
-    function colorRow(key, label) {
-      var v = c[key] || "";
-      return '<label class="skin-color">' + label +
-        '<input type="color" data-ck="' + key + '" value="' + normalizeColor(v) + '">' +
-        '<input type="text" data-ck-text="' + key + '" value="' + esc(v) + '" placeholder="留空=不覆盖" maxlength="9"></label>';
-    }
-
     var badge = locked ? ' <span class="readonly-badge">预设只读</span>' : '';
     var html = '<fieldset class="skin-edit-fs"' + (locked ? ' disabled title="预设主题只读，点「复制」后编辑副本"' : '') + '>' +
       '<legend>编辑: ' + esc(t.name) + badge + '</legend>' +
@@ -133,15 +125,6 @@
         '<label class="skin-row">名称 <input type="text" data-field="name" value="' + esc(editing.name) + '"></label>' +
         '<label class="skin-row">字体 <input type="text" data-field="font" value="' + esc(editing.font || "") + '" placeholder="留空=不覆盖"></label>' +
         '<label class="skin-row">圆角(px) <input type="number" data-field="radius" value="' + (editing.radius != null ? editing.radius : "") + '" placeholder="留空=不覆盖" min="0"></label>' +
-      '</details>' +
-      '<details open><summary>颜色 (9)</summary>' +
-        '<div class="skin-colors">' +
-          colorRow("background", "背景") + colorRow("panel", "面板") +
-          colorRow("accent", "主色") + colorRow("accentAlt", "次色") +
-          colorRow("text", "文字") + colorRow("muted", "弱文字") +
-          colorRow("sidebarBg", "侧栏") + colorRow("inputBg", "输入框") +
-          colorRow("inputBorder", "输入框边框") +
-        '</div>' +
       '</details>' +
       '<details><summary>角标与闪光</summary>' +
         '<div class="skin-deco">' +
@@ -181,45 +164,36 @@
     }).join("");
   }
 
-  // Render the overlay (wallpaper-coexistence) section: enable toggle + 3
-  // background colors (panel/input/sidebar) each with an opacity slider.
-  // When enabled, those 3 backgrounds render as rgba(hex, opacity) so wallpaper
-  // shows through semi-transparent UI panels (spec §overlay).
+  // Render the frosted-glass overlay section (spec §5.2): enable toggle +
+  // per-region (面板/输入框/侧栏) opacity + blur sliders. NO color pickers —
+  // 底色 follows ZCode theme via color-mix + native vars.
   function renderOverlaySection(theme) {
     var ov = theme.overlay || {};
-    function colorRow(key, label) {
-      var v = ov[key] || "";
-      return '<label class="skin-color">' + label +
-        '<input type="color" data-ov-ck="' + key + '" value="' + normalizeColor(v) + '">' +
-        '<input type="text" data-ov-ck-text="' + key + '" value="' + esc(v) + '" placeholder="留空=默认" maxlength="9"></label>';
+    function rangeRow(kind, region, label, max) {
+      var key = region + (kind === "op" ? "Opacity" : "Blur");
+      var def = skin.OVERLAY_DEFAULTS[key];
+      var v = (ov[key] != null) ? ov[key] : def;
+      var unit = kind === "op" ? "%" : "px";
+      var dataAttr = kind === "op" ? "data-ov-op" : "data-ov-blur";
+      var valAttr = kind === "op" ? "data-ov-op-val" : "data-ov-blur-val";
+      return '<label class="skin-row skin-opacity-row">' + label + " " + (kind === "op" ? "透明度" : "模糊度") + " " +
+        '<input type="range" ' + dataAttr + '="' + key + '" min="0" max="' + max + '" value="' + v + '">' +
+        "<span " + valAttr + '="' + key + '">' + v + unit + "</span></label>";
     }
-    function opacityRow(key, label) {
-      var v = (ov[key] != null) ? ov[key] : 100;
-      return '<label class="skin-row skin-opacity-row">' + label + ' 透明度 ' +
-        '<input type="range" data-ov-op="' + key + '" min="0" max="100" value="' + v + '">' +
-        '<span data-ov-op-val="' + key + '">' + v + '%</span></label>';
+    function regionBlock(region, label) {
+      return '<div class="skin-region">' +
+        rangeRow("op", region, label, 100) +
+        rangeRow("blur", region, label, 30) +
+        "</div>";
     }
-    return '<details class="skin-overlay-section"' + (ov.enabled ? ' open' : '') + '>' +
-      '<summary>壁纸叠加（面板半透明，让壁纸透出）' + (ov.enabled ? ' ✅已启用' : '') + '</summary>' +
-      '<label class="skin-checkbox"><input type="checkbox" data-ov-field="enabled"' + (ov.enabled ? ' checked' : '') + '> 启用壁纸叠加</label>' +
-      '<div class="skin-colors">' +
-        colorRow("panelBg", "面板色") + colorRow("inputBg", "输入框色") + colorRow("sidebarBg", "侧栏色") +
-      '</div>' +
-      opacityRow("panelOpacity", "面板") +
-      opacityRow("inputOpacity", "输入框") +
-      opacityRow("sidebarOpacity", "侧栏") +
-      '<div class="muted" style="font-size:11px">启用后，壁纸作 body 背景，面板/输入框/侧栏用上面的半透明色叠加。需先注入壁纸。</div>' +
-      '</details>';
-  }
-
-  function normalizeColor(v) {
-    // <input type=color> needs #rrggbb; if empty/invalid, default to #ffffff
-    if (!v) return "#ffffff";
-    if (/^#([0-9a-fA-F]{6})$/.test(v)) return v;
-    if (/^#([0-9a-fA-F]{3})$/.test(v)) {
-      return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
-    }
-    return "#ffffff";
+    return '<details class="skin-overlay-section"' + (ov.enabled ? " open" : "") + ">" +
+      '<summary>磨砂玻璃（面板半透明+模糊，让壁纸透出）' + (ov.enabled ? " ✅已启用" : "") + "</summary>" +
+      '<label class="skin-checkbox"><input type="checkbox" data-ov-field="enabled"' + (ov.enabled ? " checked" : "") + "> 启用磨砂玻璃</label>" +
+      regionBlock("panel", "面板") +
+      regionBlock("input", "输入框") +
+      regionBlock("sidebar", "侧栏") +
+      '<div class="muted" style="font-size:11px">启用后，面板/输入框/侧栏呈半透明磨砂玻璃，壁纸从后面透出且被模糊。底色自动跟随 ZCode 主题色。</div>' +
+      "</details>";
   }
 
   function esc(s) {
@@ -261,31 +235,22 @@
       badges.push({ emoji: em, position: pos });
     }
     editing.decorations.emojiBadges = badges;
-    // colors: prefer text field, fallback to color picker
-    editing.colors = editing.colors || {};
-    skin.COLOR_KEYS.forEach(function (k) {
-      var txt = (ed.querySelector('[data-ck-text="' + k + '"]') || {}).value;
-      var pick = (ed.querySelector('[data-ck="' + k + '"]') || {}).value;
-      var val = (txt && txt.trim()) ? txt.trim() : (pick ? pick : "");
-      editing.colors[k] = val || null;
-    });
-    // overlay (wallpaper coexistence): collect enable + 3 bg colors + 3 opacities
+    // overlay: collect enable + 3 opacities + 3 blurs (no colors — frosted glass)
     var ovEnabled = !!(ed.querySelector('[data-ov-field="enabled"]') || {}).checked;
-    function ovColor(k) {
-      var txt = (ed.querySelector('[data-ov-ck-text="' + k + '"]') || {}).value;
-      var pick = (ed.querySelector('[data-ov-ck="' + k + '"]') || {}).value;
-      var val = (txt && txt.trim()) ? txt.trim() : (pick ? pick : "");
-      return val || null;
-    }
-    function ovOp(k) {
-      var el = ed.querySelector('[data-ov-op="' + k + '"]');
-      return el ? Number(el.value) : 100;
+    function ovNum(selectorKey, attr, defKey) {
+      var el = ed.querySelector("[" + attr + '="' + selectorKey + '"]');
+      if (!el) return skin.OVERLAY_DEFAULTS[defKey];
+      var n = Number(el.value);
+      return isFinite(n) ? n : skin.OVERLAY_DEFAULTS[defKey];
     }
     editing.overlay = {
       enabled: ovEnabled,
-      panelBg: ovColor("panelBg"), panelOpacity: ovOp("panelOpacity"),
-      inputBg: ovColor("inputBg"), inputOpacity: ovOp("inputOpacity"),
-      sidebarBg: ovColor("sidebarBg"), sidebarOpacity: ovOp("sidebarOpacity")
+      panelOpacity: ovNum("panelOpacity", "data-ov-op", "panelOpacity"),
+      panelBlur: ovNum("panelBlur", "data-ov-blur", "panelBlur"),
+      inputOpacity: ovNum("inputOpacity", "data-ov-op", "inputOpacity"),
+      inputBlur: ovNum("inputBlur", "data-ov-blur", "inputBlur"),
+      sidebarOpacity: ovNum("sidebarOpacity", "data-ov-op", "sidebarOpacity"),
+      sidebarBlur: ovNum("sidebarBlur", "data-ov-blur", "sidebarBlur")
     };
     return editing;
   }
@@ -296,33 +261,17 @@
     panel.__skinBound = true;
     panel.addEventListener("change", function (e) {
       var t = e.target;
-      // sync color text<->picker (main colors)
-      var ck = t.getAttribute && t.getAttribute("data-ck");
-      var ckt = t.getAttribute && t.getAttribute("data-ck-text");
-      if (ck) {
-        var txt = panel.querySelector('[data-ck-text="' + ck + '"]');
-        if (txt && txt.value !== t.value) txt.value = t.value;
-      }
-      if (ckt) {
-        var pick = panel.querySelector('[data-ck="' + ckt + '"]');
-        if (pick && normalizeColor(t.value) !== pick.value && skin.isValidHex(t.value)) pick.value = normalizeColor(t.value);
-      }
-      // sync overlay color text<->picker
-      var ovck = t.getAttribute && t.getAttribute("data-ov-ck");
-      var ovckt = t.getAttribute && t.getAttribute("data-ov-ck-text");
-      if (ovck) {
-        var otxt = panel.querySelector('[data-ov-ck-text="' + ovck + '"]');
-        if (otxt && otxt.value !== t.value) otxt.value = t.value;
-      }
-      if (ovckt) {
-        var opick = panel.querySelector('[data-ov-ck="' + ovckt + '"]');
-        if (opick && normalizeColor(t.value) !== opick.value && skin.isValidHex(t.value)) opick.value = normalizeColor(t.value);
-      }
       // overlay opacity slider: live-update the % label
       var ovop = t.getAttribute && t.getAttribute("data-ov-op");
       if (ovop) {
         var lbl = panel.querySelector('[data-ov-op-val="' + ovop + '"]');
         if (lbl) lbl.textContent = t.value + "%";
+      }
+      // overlay blur slider: live-update the value label (px)
+      var ovbl = t.getAttribute && t.getAttribute("data-ov-blur");
+      if (ovbl) {
+        var blbl = panel.querySelector('[data-ov-blur-val="' + ovbl + '"]');
+        if (blbl) blbl.textContent = t.value + "px";
       }
       // sparkle count slider: live-update the count label
       if (t.getAttribute && t.getAttribute("data-field") === "sparkleCount") {
@@ -441,19 +390,18 @@
     });
 
     // ---- LIVE PREVIEW ----
-    // While the user drags an opacity slider / picks a color in the overlay or
-    // main color section, immediately apply the in-progress theme to ZCode so
-    // they see the effect without clicking save+apply. Debounced 250ms so a
-    // drag doesn't flood the server with requests.
-    // Triggers: data-ov-op (overlay opacity), data-ov-ck / data-ov-ck-text
-    // (overlay colors), data-ck / data-ck-text (main colors), data-field
-    // (font/radius/brand/sparkle/emojiPosition). Uses `input` event (fires
-    // continuously during slider drag) for range/color, `change` for text.
+    // While the user drags an overlay slider (opacity or blur) or edits a
+    // basic field, immediately apply the in-progress theme to ZCode so they
+    // see the effect without clicking save+apply. Debounced 250ms so a drag
+    // doesn't flood the server with requests.
+    // Triggers: data-ov-op (overlay opacity), data-ov-blur (overlay blur),
+    // data-field (font/radius/sparkle/emojiPosition). Uses `input` event
+    // (fires continuously during slider drag) for range inputs.
     panel.addEventListener("input", function (e) {
       var t = e.target;
       if (!t || !t.getAttribute) return;
-      var interesting = t.getAttribute("data-ov-op") || t.getAttribute("data-ov-ck") ||
-        t.getAttribute("data-ck") || t.getAttribute("data-field");
+      var interesting = t.getAttribute("data-ov-op") || t.getAttribute("data-ov-blur") ||
+        t.getAttribute("data-field");
       if (!interesting) return;
       scheduleLivePreview();
     });

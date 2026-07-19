@@ -14,13 +14,26 @@ var skinModel = (function () {
   if (typeof require === "function") {
     try { return require("../../lib/skin.cjs"); } catch (e) {}
   }
-  // browser inline copy (kept in sync with lib/skin.cjs manually)
+  // browser inline copy — MUST stay in sync with lib/skin.cjs (lesson 17 mirror,
+  // skintest runs same assertions against both via window.__ccSkin).
+  var OPACITY_RANGE = { min: 0, max: 100 };
+  var BLUR_RANGE = { min: 0, max: 30 };
+  var OVERLAY_DEFAULTS = {
+    enabled: true,
+    panelOpacity: 70, panelBlur: 12,
+    inputOpacity: 70, inputBlur: 12,
+    sidebarOpacity: 70, sidebarBlur: 12
+  };
+  var DECORATION_EMOJI_POSITIONS = ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"];
+  function clampNum(v, min, max, def) {
+    if (v == null || v === "" || !isFinite(v)) return def;
+    return Math.max(min, Math.min(max, Number(v)));
+  }
   return {
-    // The browser build re-defines these — but to keep this file standalone for
-    // <script> inclusion, we DO require the duplicates. For simplicity in this
-    // project (Node-tested), the browser path is exercised by real-machine only.
-    COLOR_KEYS: ["background", "panel", "accent", "accentAlt", "text", "muted", "sidebarBg", "inputBg", "inputBorder"],
-    DECORATION_EMOJI_POSITIONS: ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"],
+    OPACITY_RANGE: OPACITY_RANGE,
+    BLUR_RANGE: BLUR_RANGE,
+    OVERLAY_DEFAULTS: OVERLAY_DEFAULTS,
+    DECORATION_EMOJI_POSITIONS: DECORATION_EMOJI_POSITIONS,
     isValidHex: function (s) {
       if (typeof s !== "string") return false;
       return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s);
@@ -39,17 +52,17 @@ var skinModel = (function () {
       var a = isFinite(opacityPct) ? Math.max(0, Math.min(100, Number(opacityPct))) / 100 : 1;
       return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + a + ")";
     },
+    clampNum: clampNum,
     makeOverlay: function (partial) {
       var o = (partial && typeof partial === "object") ? partial : {};
-      function op(v) { return isFinite(v) && v !== null && v !== "" ? Math.max(0, Math.min(100, Number(v))) : 100; }
       return {
         enabled: o.enabled === true,
-        panelBg: this.isValidHex(o.panelBg) ? o.panelBg : null,
-        panelOpacity: op(o.panelOpacity),
-        inputBg: this.isValidHex(o.inputBg) ? o.inputBg : null,
-        inputOpacity: op(o.inputOpacity),
-        sidebarBg: this.isValidHex(o.sidebarBg) ? o.sidebarBg : null,
-        sidebarOpacity: op(o.sidebarOpacity)
+        panelOpacity: clampNum(o.panelOpacity, OPACITY_RANGE.min, OPACITY_RANGE.max, OVERLAY_DEFAULTS.panelOpacity),
+        panelBlur: clampNum(o.panelBlur, BLUR_RANGE.min, BLUR_RANGE.max, OVERLAY_DEFAULTS.panelBlur),
+        inputOpacity: clampNum(o.inputOpacity, OPACITY_RANGE.min, OPACITY_RANGE.max, OVERLAY_DEFAULTS.inputOpacity),
+        inputBlur: clampNum(o.inputBlur, BLUR_RANGE.min, BLUR_RANGE.max, OVERLAY_DEFAULTS.inputBlur),
+        sidebarOpacity: clampNum(o.sidebarOpacity, OPACITY_RANGE.min, OPACITY_RANGE.max, OVERLAY_DEFAULTS.sidebarOpacity),
+        sidebarBlur: clampNum(o.sidebarBlur, BLUR_RANGE.min, BLUR_RANGE.max, OVERLAY_DEFAULTS.sidebarBlur)
       };
     },
     normalizeEmojiBadges: function (deco) {
@@ -61,13 +74,13 @@ var skinModel = (function () {
           if (!b || typeof b !== "object") continue;
           var em = (b.emoji != null ? String(b.emoji) : "").trim();
           if (!em) continue;
-          var pos = this.DECORATION_EMOJI_POSITIONS.indexOf(b.position) >= 0 ? b.position : "top-left";
+          var pos = DECORATION_EMOJI_POSITIONS.indexOf(b.position) >= 0 ? b.position : "top-left";
           out.push({ emoji: em, position: pos });
         }
         return out;
       }
       if (deco.emojiBadge != null && String(deco.emojiBadge).trim()) {
-        var pos2 = this.DECORATION_EMOJI_POSITIONS.indexOf(deco.emojiPosition) >= 0 ? deco.emojiPosition : "top-left";
+        var pos2 = DECORATION_EMOJI_POSITIONS.indexOf(deco.emojiPosition) >= 0 ? deco.emojiPosition : "top-left";
         out.push({ emoji: String(deco.emojiBadge).trim(), position: pos2 });
       }
       return out;
@@ -78,39 +91,71 @@ var skinModel = (function () {
     validateTheme: function (t) {
       var errors = [];
       if (!t || typeof t !== "object") return { ok: false, errors: ["theme is not an object"] };
-      if (!t.name || !String(t.name).trim()) errors.push("name 不能为空");
-      if (t.colors && typeof t.colors === "object") {
-        for (var i = 0; i < this.COLOR_KEYS.length; i++) {
-          var k = this.COLOR_KEYS[i]; var v = t.colors[k];
-          if (v != null && v !== "" && !this.isValidHex(v)) errors.push("colors." + k + " 不是合法 hex");
+      if (!t.name || typeof t.name !== "string" || !t.name.trim()) errors.push("name 不能为空");
+      // NOTE: t.colors (legacy) silently ignored, NOT validated.
+      if (t.radius != null && t.radius !== "") {
+        var r = Number(t.radius);
+        if (!isFinite(r) || r < 0) errors.push("radius 必须是非负数字");
+      }
+      if (t.font != null && t.font !== "" && typeof t.font !== "string") {
+        errors.push("font 必须是字符串");
+      }
+      if (t.overlay) {
+        if (typeof t.overlay !== "object") {
+          errors.push("overlay 必须是对象");
+        } else {
+          function checkRange(v, key, min, max) {
+            if (v == null || v === "") return;
+            if (!isFinite(v) || v < min || v > max) {
+              errors.push("overlay." + key + " 必须在 " + min + "-" + max);
+            }
+          }
+          checkRange(t.overlay.panelBlur, "panelBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.inputBlur, "inputBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.sidebarBlur, "sidebarBlur", BLUR_RANGE.min, BLUR_RANGE.max);
+          checkRange(t.overlay.panelOpacity, "panelOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+          checkRange(t.overlay.inputOpacity, "inputOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
+          checkRange(t.overlay.sidebarOpacity, "sidebarOpacity", OPACITY_RANGE.min, OPACITY_RANGE.max);
         }
       }
-      if (t.radius != null && t.radius !== "" && (!isFinite(Number(t.radius)) || Number(t.radius) < 0)) errors.push("radius 必须是非负数字");
-      if (t.decorations && Array.isArray(t.decorations.emojiBadges)) {
-        for (var j = 0; j < t.decorations.emojiBadges.length; j++) {
-          var b = t.decorations.emojiBadges[j];
-          if (b && typeof b === "object" && b.position != null && this.DECORATION_EMOJI_POSITIONS.indexOf(b.position) === -1) {
-            errors.push("emojiBadges[" + j + "].position 无效");
+      if (t.decorations) {
+        if (typeof t.decorations !== "object") {
+          errors.push("decorations 必须是对象");
+        } else {
+          if (Array.isArray(t.decorations.emojiBadges)) {
+            for (var i = 0; i < t.decorations.emojiBadges.length; i++) {
+              var b = t.decorations.emojiBadges[i];
+              if (b && typeof b === "object" && b.position != null &&
+                  DECORATION_EMOJI_POSITIONS.indexOf(b.position) === -1) {
+                errors.push("emojiBadges[" + i + "].position 必须是 " + DECORATION_EMOJI_POSITIONS.join("/") + " 之一");
+              }
+            }
+          }
+          if (t.decorations.emojiBadge != null && t.decorations.emojiBadge !== "" &&
+              DECORATION_EMOJI_POSITIONS.indexOf(t.decorations.emojiPosition) === -1) {
+            errors.push("emojiPosition 必须是 " + DECORATION_EMOJI_POSITIONS.join("/") + " 之一");
           }
         }
       }
       return errors.length ? { ok: false, errors: errors } : { ok: true };
     },
     makeSkinTheme: function (p) {
-      p = p || {}; var c = p.colors || {}; var d = p.decorations || {};
+      p = p || {}; var d = p.decorations || {};
       return {
         id: p.id || this.makeSkinId(), name: p.name || "未命名皮肤", isBuiltin: p.isBuiltin === true,
-        colors: { background: c.background||null, panel: c.panel||null, accent: c.accent||null, accentAlt: c.accentAlt||null, text: c.text||null, muted: c.muted||null, sidebarBg: c.sidebarBg||null, inputBg: c.inputBg||null, inputBorder: c.inputBorder||null },
-        font: p.font || null, radius: (p.radius!=null&&p.radius!=="")?Number(p.radius):null,
+        font: p.font || null, radius: (p.radius != null && p.radius !== "") ? Number(p.radius) : null,
         overlay: this.makeOverlay(p.overlay),
-        decorations: { sparkle: d.sparkle!==false, sparkleCount: (function(){var n=Number(d.sparkleCount);if(!isFinite(n)||d.sparkleCount==null||d.sparkleCount==="")return 12;return Math.max(0,Math.min(50,Math.round(n)));})(), emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge||null, emojiPosition: this.DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition)>=0?d.emojiPosition:"top-left" }
+        decorations: {
+          sparkle: d.sparkle === true,
+          sparkleCount: (function () { var n = Number(d.sparkleCount); if (!isFinite(n) || d.sparkleCount == null || d.sparkleCount === "") return 12; return Math.max(0, Math.min(50, Math.round(n))); })(),
+          emojiBadges: this.normalizeEmojiBadges(d), emojiBadge: d.emojiBadge || null,
+          emojiPosition: DECORATION_EMOJI_POSITIONS.indexOf(d.emojiPosition) >= 0 ? d.emojiPosition : "top-left"
+        }
       };
     },
     builtinPresets: function () {
       return [
-        { id: "skin-pink-builtin", name: "粉紫梦境", isBuiltin: true, colors: { background:"#fff9fc",panel:"#ffffff",accent:"#8b3dce",accentAlt:"#b45cff",text:"#4c2364",muted:"#9e58bd",sidebarBg:"#fff3f9",inputBg:"#fff5fa",inputBorder:"#e484bc" }, font:null, radius:16, overlay:{enabled:true,panelBg:"#fff9fc",panelOpacity:85,inputBg:"#fff5fa",inputOpacity:90,sidebarBg:"#fff3f9",sidebarOpacity:85}, decorations:{sparkle:true,emojiBadges:[{emoji:"♡",position:"top-left"},{emoji:"✦",position:"top-right"},{emoji:"🎀",position:"bottom-right"}]} },
-        { id: "skin-darkgold-builtin", name: "暗夜金", isBuiltin: true, colors: { background:"#1a1410",panel:"#241d16",accent:"#d4a017",accentAlt:"#f0c040",text:"#e8dcc8",muted:"#9a8a70",sidebarBg:"#15110d",inputBg:"#2a2118",inputBorder:"#5a4a30" }, font:null, radius:12, overlay:{enabled:true,panelBg:"#241d16",panelOpacity:88,inputBg:"#2a2118",inputOpacity:92,sidebarBg:"#15110d",sidebarOpacity:85}, decorations:{sparkle:true,emojiBadges:[{emoji:"✦",position:"top-right"}]} },
-        { id: "skin-sepia-builtin", name: "护眼米黄", isBuiltin: true, colors: { background:"#f5ecd9",panel:"#fbf5e8",accent:"#8b6914",accentAlt:"#a8862f",text:"#3a2f1f",muted:"#7a6a4f",sidebarBg:"#efe4cb",inputBg:"#faf3e0",inputBorder:"#c9b890" }, font:null, radius:10, overlay:{enabled:false,panelBg:"#fbf5e8",panelOpacity:90,inputBg:"#faf3e0",inputOpacity:92,sidebarBg:"#efe4cb",sidebarOpacity:88}, decorations:{sparkle:false,emojiBadges:[]} }
+        { id: "skin-default-builtin", name: "默认主题", isBuiltin: true, font: null, radius: null, overlay: { enabled: true, panelOpacity: 70, panelBlur: 12, inputOpacity: 70, inputBlur: 12, sidebarOpacity: 70, sidebarBlur: 12 }, decorations: { sparkle: false, sparkleCount: 12, emojiBadges: [] } }
       ];
     },
     ensureBuiltinPresets: function (state) {
@@ -124,10 +169,7 @@ var skinModel = (function () {
     duplicateTheme: function (state, id) {
       if (!state || !state.themes || !state.themes[id]) return null;
       var src = state.themes[id];
-      var copy = this.makeSkinTheme(Object.assign({}, src, {
-        id: undefined, // force makeSkinTheme to mint a new id
-        decorations: Object.assign({}, src.decorations)
-      }));
+      var copy = this.makeSkinTheme(Object.assign({}, src, { id: undefined, decorations: Object.assign({}, src.decorations) }));
       copy.isBuiltin = false; copy.name = src.name + " 副本";
       return copy;
     }
@@ -157,11 +199,14 @@ function getActiveSkin(state) {
 
 // Re-export model fns + IO glue under both CommonJS and window.
 var api = {
-  COLOR_KEYS: skinModel.COLOR_KEYS,
+  OPACITY_RANGE: skinModel.OPACITY_RANGE,
+  BLUR_RANGE: skinModel.BLUR_RANGE,
+  OVERLAY_DEFAULTS: skinModel.OVERLAY_DEFAULTS,
   DECORATION_EMOJI_POSITIONS: skinModel.DECORATION_EMOJI_POSITIONS,
   isValidHex: skinModel.isValidHex,
   hexToRgb: skinModel.hexToRgb,
   hexToRgba: skinModel.hexToRgba,
+  clampNum: skinModel.clampNum,
   makeOverlay: skinModel.makeOverlay,
   normalizeEmojiBadges: skinModel.normalizeEmojiBadges,
   makeSkinId: skinModel.makeSkinId,
