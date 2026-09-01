@@ -239,10 +239,11 @@ function check(name, cond) {
     fs.writeFileSync(path.join(vtmp, "b.txt"), "x");
     fs.writeFileSync(path.join(vtmp, "c.webm"), "x");
     fs.writeFileSync(path.join(vtmp, "d.jpg"), "x");
+    fs.writeFileSync(path.join(vtmp, "e.m4v"), "x");
     var vids = listVideos(vtmp).sort();
     check(
       "listVideos filters to video extensions (no .jpg/.txt)",
-      JSON.stringify(vids) === JSON.stringify(["a.mp4", "c.webm"])
+      JSON.stringify(vids) === JSON.stringify(["a.mp4", "c.webm", "e.m4v"])
     );
   } finally {
     fs.rmSync(vtmp, { recursive: true, force: true });

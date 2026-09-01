@@ -469,9 +469,14 @@ server `/api/action muteVideo/unmuteVideo` → `lib/video-mute.cjs` 的 `setVide
 `resize.cjs` **不碰视频**。Electron 直接播原文件，mp4 多大就吃多大。`wallpapers-video/` 里的样本
 建议挑体积小的（本项目测试用的是 ~80-110MB 的短 clip）。
 
-### 支持的容器格式（真机验过，2026-06）
+### 支持的容器格式（真机验过）
 
 - **`.mp4`** —— 最稳，H.264 + AAC 是 Chromium 原生支持，无脑选。
+- **`.m4v`（2026-08 实测可播）** —— Apple 的 mp4 容器变体，真机验过音画都有
+  （`ZCODE_WP_VIDEO` 指向单个 `.m4v` 注入，画面+声音正常；文件名带空格/`-` 也没问题）。
+  带 FairPlay DRM 的除外（iTunes 商店购买的正片——遇到黑屏先想到它）。
+  `VIDEO_EXTS` 白名单单一权威在 `lib/inject.cjs`；`lib/status.cjs` 的资源计数
+  require 复用同一份，不再自带拷贝（教训 1 根除重复）。
 - **`.mov`** —— 实测**完全可播**（音画都有，可直接当视频壁纸用）。
   ⚠️ **别拿"Chromium 在 Windows 上播 mov 靠系统 codec、Electron 默认不带"的常识去推测**——
   那个推测在当前 ZCode（Electron）上**被真机证伪了**（教训 10/21：理论打架信事实、"应该能 X"
