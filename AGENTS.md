@@ -333,6 +333,15 @@ brainstorm 时我断言"webview 必盖壁纸"（基于 CSS 常识），又有人
 （wallpaper.css 设 transparent 的效果），是**页面自己**画实色背景盖住。结论：页面写
 `background:transparent` 就透。控制中心的整个 A1 设计依据是这个探测，不是任何 CSS 常识。
 
+**⚠️ 子坑 A 结论的时效性（2026-09 真机翻车）**：ZCode 更新后给浏览器面板 `<webview>`
+元素加了**内联** `background-color: rgb(255,255,255)`（class `browser-use-viewport`）——
+上面"webview 元素全透明"的结论被推翻。于是壁纸注上了、祖先链也全透明，控制中心
+（透明页面）却是一片白：白色 webview 元素正好挡在透明页面和壁纸中间。**内联样式只有
+`!important` 能盖过**，wallpaper.css 第 5 段 `webview{background-color:transparent !important}`
+钉死它（selftest Test 1 有断言防删）。对外部网页无影响（网页自己画不透明底，
+webview 元素底色露不出来）。**教训：这类"能透/不能透"的结论绑定 ZCode 具体版本，
+ZCode 更新后要用探测脚本复核，别当成永久事实。**
+
 ### 子坑 B：目录滚不到当前章（offsetParent 链走不通）
 
 reader 展开侧栏，目录不滚到当前章。我连改三版：`scrollIntoView` → `offsetTop` 沿 offsetParent

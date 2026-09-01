@@ -74,6 +74,13 @@ function check(name, cond) {
   const style = document.getElementById(STYLE_ID);
   check("inject: style present after inject", !!style);
   check("inject: css textContent set", style && style.textContent.length === css.length);
+  // webview 透明规则必须存在：ZCode 给浏览器面板 <webview> 加了内联白底
+  // （browser-use-viewport），没有这条 !important 规则壁纸会被白块挡住
+  // （2026-09 真机）。内联样式只有 !important 能盖过，别改成普通规则。
+  check(
+    "inject: wallpaper.css forces webview transparent (!important beats inline white)",
+    /webview\s*\{[^}]*background-color:\s*transparent\s*!important/.test(css)
+  );
 }
 
 // --- Test 2: remove after inject ---

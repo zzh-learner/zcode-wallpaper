@@ -283,6 +283,27 @@ GB18030 兜底。识别可疑的书带 ⚠️ 标记，顶栏可手动切编码�
 - **书架进度**：reader 和控制中心共享同一个 localStorage（同 origin），在 reader 读到新章节后，
   回控制中心书架会显示更新（控制中心每 2 秒重读）。
 
+### 故障记录：控制中心白底（ZCode 更新导致，2026-09 已修复）
+
+某次 ZCode 更新后，控制中心变成下面这样一大块白底：
+
+![控制中心白底（ZCode 更新导致）](control-white-bug.png)
+
+**原因**：这次更新给浏览器面板的 `<webview>` 元素加了**内联**样式
+`background-color: rgb(255,255,255)`。控制中心页面本身是全透明的（设计如此，靠垫在底下的壁纸出图），
+这块白色 webview 元素底正好挡在透明页面和壁纸中间——壁纸注上了也透不出来，白色文字压在白底上。
+和壁纸注入、主题设置都无关，纯 ZCode 侧改动。
+
+**修复**：`lib/wallpaper.css` 第 5 段 `webview { background-color: transparent !important }`。
+内联样式只有 `!important` 能盖过，壁纸注入时（图片/视频模式共用这份 CSS）自动把面板刷回透明，
+外部网页不受影响（网页自己画不透明背景）。重新注入一次壁纸（`npm run inject` 或控制中心
+「注入图片壁纸」按钮）即可生效。
+
+**再遇到白底怎么排查**：先确认壁纸已注入（状态条非"未注入"），再跑
+`node scripts/inspect-control-white.cjs` 探测——看 `<webview>` 的 computed `backgroundColor`：
+`rgba(0, 0, 0, 0)` = 透明正常；`rgb(255, 255, 255)` = ZCode 又改了 webview 样式，需要更新
+wallpaper.css 的覆盖规则。
+
 
 
 - **图片壁纸**：改 `lib/wallpaper.css`（全屏透明模式，把 UI 背景变量强制透明让壁纸透出）

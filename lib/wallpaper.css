@@ -56,3 +56,12 @@ body {
 .focus-within\:bg-input-focused {
   background-color: transparent !important;
 }
+
+/* 5) 浏览器面板 <webview> 元素：ZCode 更新后给它加了内联
+      background-color: rgb(255,255,255)（browser-use-viewport 类）。
+      内联样式只有 !important 能盖过。不强制透明的话，这块白正好挡在
+      控制中心/阅读器（透明页面）和壁纸中间，面板里一片白（2026-09 真机）。
+      对外部网页无影响：网页自己画不透明背景，webview 元素底色露不出来。 */
+webview {
+  background-color: transparent !important;
+}
