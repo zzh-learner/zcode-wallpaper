@@ -119,9 +119,9 @@ var stDepsMissing = {
 var htmlDeps = sv.renderStatus(stDepsMissing);
 check("结构: 依赖缺失时含 err-row", htmlDeps.indexOf("err-row") !== -1);
 check("结构: 依赖缺失时显示 ✗", htmlDeps.indexOf("✗") !== -1);
-// 6 行（数 status-row 出现次数）
+// 7 行（数 status-row 出现次数；hindsight 未给 -> "—" 行也渲染）
 var rowCount = (html1.match(/status-row/g) || []).length;
-check("结构: 共 6 个 status-row", rowCount === 6);
+check("结构: 共 7 个 status-row", rowCount === 7);
 // rotate stale + transparent unknown 触发 warn-row（Task 4 review 补断言）
 check("结构: rotate stale 含 warn-row", rotStale.indexOf("warn-row") !== -1);
 var stUnknown = {
@@ -132,6 +132,23 @@ var stUnknown = {
 };
 var htmlUnknown = sv.renderStatus(stUnknown);
 check("结构: transparent unknown 含 warn-row", htmlUnknown.indexOf("warn-row") !== -1);
+
+// === 记忆（hindsight）行：三态 ===
+var hsRun = sv.renderStatus({
+  zcode: { running: true }, wallpaper: { mode: "none" }, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  hindsight: { running: true, serverMode: "self-hosted", apiUrl: "http://127.0.0.1:9077", profile: "coding-agent" },
+  _meta: { probeErrors: [] },
+});
+check("记忆行: running -> 运行中 + 地址", hsRun.indexOf("记忆") !== -1 && hsRun.indexOf("运行中") !== -1 && hsRun.indexOf("127.0.0.1:9077") !== -1);
+var hsDown = sv.renderStatus({
+  zcode: { running: true }, wallpaper: { mode: "none" }, transparent: null,
+  reader: { running: true }, resources: { images: 0 },
+  hindsight: { running: false, serverMode: "self-hosted", apiUrl: "http://127.0.0.1:9077", profile: "coding-agent" },
+  _meta: { probeErrors: [] },
+});
+check("记忆行: stopped -> 已停止 + warn-row 指路记忆 tab", hsDown.indexOf("已停止") !== -1 && hsDown.indexOf("warn-row") !== -1);
+check("记忆行: null probe -> 占位 —（html1 无 hindsight 字段）", html1.indexOf("记忆") !== -1 && html1.indexOf("—") !== -1);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail === 0 ? 0 : 1);

@@ -16,16 +16,19 @@
       panes[j].classList.toggle("active", panes[j].getAttribute("data-pane") === name);
     }
     try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
-    // 切到皮肤 Tab 时立即渲染一次（避免首次进入空白）
+    // 切到皮肤 Tab 时立即渲染一次（避免首次进入空白）；记忆 Tab 同理立即拉一次
     if (name === "skin" && window.__ccSkinView) {
       try { window.__ccSkinView.renderSkinPanel(); } catch (e) {}
+    }
+    if (name === "hindsight" && window.__ccHindsightView) {
+      try { window.__ccHindsightView.refresh(); } catch (e) {}
     }
   }
   (function initTab() {
     var saved = null;
     try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
     // 只接受已知 Tab 名
-    var valid = { overview: 1, wallpaper: 1, reader: 1, skin: 1 };
+    var valid = { overview: 1, wallpaper: 1, reader: 1, skin: 1, hindsight: 1 };
     activateTab(saved && valid[saved] ? saved : "overview");
   })();
   document.getElementById("tabs").addEventListener("click", function (e) {
@@ -92,6 +95,11 @@
       if (window.__ccSkinView) {
         try { window.__ccSkinView.renderSkinPanel(); }
         catch (e) { /* skin render error non-fatal */ }
+      }
+      // hindsight 面板：tick 内部自带 5s 节流 + tab 可见检查，每 2s poll 直接调即可
+      if (window.__ccHindsightView) {
+        try { window.__ccHindsightView.tick(); }
+        catch (e) { /* hindsight render error non-fatal */ }
       }
     });
   }

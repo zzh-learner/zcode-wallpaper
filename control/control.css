@@ -226,3 +226,33 @@ body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: bo
 /* ---- SVG 图标（spec §10.3） ---- */
 .icon { width: 14px; height: 14px; vertical-align: middle; display: inline-block;
   margin-right: 2px; }
+
+/* ---- 记忆（hindsight）面板 ---- */
+#hindsight-panel > div { margin-bottom: var(--space-3); }
+#hindsight-panel > div:last-child { margin-bottom: 0; }
+.hs-actions { display: flex; gap: var(--space-1); }
+.hs-msg { font-size: var(--fs-sm); color: var(--text-secondary); display: block; margin: var(--space-1) 0; min-height: 1em; }
+.hs-kv { font-size: var(--fs-sm); margin: 2px 0; color: var(--text-secondary); word-break: break-all; }
+.hs-kv b { color: var(--text-primary); font-weight: 500; }
+.hs-err { color: var(--err); font-size: var(--fs-sm); word-break: break-all; }
+.hs-details { border-top: 1px solid rgba(255, 255, 255, 0.08); padding: var(--space-2) 0; }
+.hs-details:first-of-type { border-top: none; }
+.hs-details summary { font-size: var(--fs-sm); font-weight: 600; cursor: pointer; color: var(--text-primary); }
+.hs-details summary:hover { color: var(--accent); }
+.hs-table { width: 100%; border-collapse: collapse; font-size: var(--fs-xs); margin-top: var(--space-1); }
+.hs-table th, .hs-table td { text-align: left; padding: 3px 8px 3px 0; vertical-align: top;
+  color: var(--text-primary); border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.hs-table th { color: var(--text-secondary); font-weight: 500; }
+.hs-src { font-size: var(--fs-xs); color: var(--text-secondary); white-space: nowrap; }
+.hs-src-env { color: var(--warn); }
+.hs-src-file { color: var(--ok); }
+.hs-src-harness { color: var(--accent); }
+.hs-pre { font-family: Consolas, "Courier New", monospace; font-size: var(--fs-xs); white-space: pre-wrap;
+  word-break: break-all; max-height: 220px; overflow: auto; background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-1) 0 0 0; }
+.hs-pre-log { max-height: 300px; }
+.hs-bank .hs-bank-toggle { cursor: pointer; flex: 1; }
+.hs-bank small { margin-left: 4px; }
+.hs-tree-indent { padding-left: 24px; }
+.hs-tree-node { font-size: var(--fs-sm); margin: 1px 0; color: var(--text-primary); word-break: break-all; }
+.hs-tree-folder { color: var(--accent); font-weight: 600; }

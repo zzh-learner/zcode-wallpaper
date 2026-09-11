@@ -11,6 +11,7 @@
     <button class="tab" data-tab="wallpaper">壁纸</button>
     <button class="tab" data-tab="reader">阅读</button>
     <button class="tab" data-tab="skin">皮肤</button>
+    <button class="tab" data-tab="hindsight">记忆</button>
   </div>
   <div id="tab-content">
     <section class="tab-pane active" data-pane="overview">
@@ -68,6 +69,14 @@
     <section class="tab-pane" data-pane="skin">
       <div id="skin-panel" class="panel"></div>
     </section>
+    <section class="tab-pane" data-pane="hindsight">
+      <div id="hindsight-panel" class="panel">
+        <div id="hs-status"></div>
+        <div id="hs-config"></div>
+        <div id="hs-banks"></div>
+        <div id="hs-logs"></div>
+      </div>
+    </section>
   </div>
   <script src="lib/icons.js"></script>
   <script src="lib/status-view.js"></script>
@@ -75,6 +84,7 @@
   <script src="lib/skin-view.js"></script>
   <script src="lib/shelf.js"></script>
   <script src="lib/bookmark.js"></script>
+  <script src="lib/hindsight-view.js"></script>
   <script src="control.js"></script>
 </body>
 </html>

@@ -76,12 +76,19 @@ function renderStatus(st) {
     var nextStr = rot.nextSwitchAt ? new Date(rot.nextSwitchAt).toLocaleTimeString() : '—';
     rotSub = '每 ' + esc(Math.round(rot.intervalMs / 60000)) + 'min · 下次 ' + esc(nextStr) + ' · 当前 ' + esc(rot.lastFile || '—');
   }
+  // 记忆（hindsight self-hosted 服务）行：没开时指路「记忆」tab（那里有启动按钮）
+  var hs = st.hindsight;
+  var hsVal, hsSub, hsRow;
+  if (!hs) { hsVal = '<span class="muted">—</span>'; }
+  else if (hs.running) { hsVal = '<span class="ok"><span class="dot"></span>运行中</span>'; hsSub = 'hindsight · ' + esc(hs.apiUrl); }
+  else { hsVal = '<span class="warn">已停止</span>'; hsSub = 'self-hosted 模式需手动启动 · 去「记忆」tab'; hsRow = "warn-row"; }
   return row("ZCode", zVal, zSub, zRow) +
     row("壁纸", wVal, wSub) +
     row("透明度", tVal, null, tRow) +
     row("阅读器", rVal) +
     row("资源", resVal, resSub, resRow) +
-    row("轮播", rotVal, rotSub, rotRow);
+    row("轮播", rotVal, rotSub, rotRow) +
+    row("记忆", hsVal, hsSub, hsRow);
 }
 if (typeof module !== "undefined" && module.exports) module.exports = { renderStatus: renderStatus };
 if (typeof window !== "undefined") window.__ccStatusView = { renderStatus: renderStatus };

@@ -19,10 +19,11 @@ const merged = status.mergeProbeResults({
   reader: null,
   resources: { images: 5 },
   rotate: { running: false },
+  hindsight: null,           // memory server probe failed
 });
 check("merge keeps non-null zcode", merged.zcode.running === true);
 check("merge null wallpaper -> null field", merged.wallpaper === null);
-check("merge records probeErrors for nulls", Array.isArray(merged._meta.probeErrors) && merged._meta.probeErrors.length === 2);
+check("merge records probeErrors for nulls", Array.isArray(merged._meta.probeErrors) && merged._meta.probeErrors.length === 3);
 check("merge _meta.fetchedAt is number", typeof merged._meta.fetchedAt === "number");
 
 // === classifyTransparent: spec §10 状态机纯分类 ===
@@ -60,6 +61,9 @@ const fs = require("fs"), os = require("os"), path = require("path");
   // zcode: either {running:true,...} (ZCode up) or null (CDP down). Either way
   // it must NOT crash. Don't assume CDP down — test env may have ZCode running.
   check("snapshot zcode is object-or-null (no crash)", s.zcode === null || (s.zcode && typeof s.zcode.running === "boolean"));
+  // hindsight probe reads the real ~/.hindsight config (machine-dependent):
+  // graceful either way — object with running:boolean, or null (probeErrors).
+  check("snapshot hindsight is object-or-null (no crash)", s.hindsight === null || (s.hindsight && typeof s.hindsight.running === "boolean"));
   check("snapshot _meta always has probeErrors array", Array.isArray(s._meta.probeErrors));
 
   // === probeRotate (spec §5.1): three states ===

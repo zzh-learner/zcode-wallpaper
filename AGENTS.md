@@ -8,15 +8,15 @@
 **多个能力，分属三种不同层**：
 - **图片 / 视频壁纸 / 壁纸轮播 / webview `_blank` 修复**：CDP（Chrome DevTools Protocol）注入 `<style>`/`<video>` 或操作 DOM 到 ZCode 主页面 / webview
 - **窗口透明**：Win32 `SetLayeredWindowAttributes` 改 ZCode 主窗口 HWND 的 alpha（原生窗口层，不走 CDP）
-- **小说阅读器（txt + epub）/ 控制中心 / 书签管理**：独立本地 HTTP server + 前端 SPA，ZCode 自带浏览器面板加载它（**不走 CDP，不注入主页面**）
+- **小说阅读器（txt + epub）/ 控制中心 / 书签管理 / hindsight 管理**：独立本地 HTTP server + 前端 SPA，ZCode 自带浏览器面板加载它（**不走 CDP，不注入主页面**）
 
-各能力的完整章节、设计依据、已知遗留见下方对应小节（"视频壁纸""窗口透明模式""小说阅读器""控制中心""壁纸轮播""书签管理""webview `_blank` 链接修复""epub 支持"）。**改某子系统前先读对应章节 + 核心教训。**
+各能力的完整章节、设计依据、已知遗留见下方对应小节（"视频壁纸""窗口透明模式""小说阅读器""控制中心""壁纸轮播""书签管理""webview `_blank` 链接修复""epub 支持""hindsight 管理"）。**改某子系统前先读对应章节 + 核心教训。**
 
 ## 快速命令（from `package.json` scripts）
 
 | 用途 | 命令 |
 | --- | --- |
-| 跑全量测试（28 个 test 文件，顺序串行） | `npm test` |
+| 跑全量测试（32 个 test 文件，顺序串行） | `npm test` |
 | 注入图片壁纸（独立跑，需 ZCode 已带 9222 端口） | `npm run inject` |
 | 注入视频壁纸 | `npm run inject:video` |
 | 移除注入 | `npm run remove` |
@@ -742,10 +742,12 @@ CDP `/json` 返回的 webview `webSocketDebuggerUrl` 是 `ws://localhost/devtool
 - `lib/cdp.cjs` —— **只读** CDP 共享模块。`filterTargets`/`listTargets`/`connect`/`probeWallpaperMode`。
   `inject.cjs` 也改 `require('./cdp.cjs')` 复用（消除两份 CDP 胶水）。**背景**：spec 原写"复用 inject.cjs
   已导出的 listTargets"是事实错误——它根本没导出（核实 inject.cjs 导出列表无 listTargets/connect/verifyExpression）。
-- `lib/status.cjs` —— 纯只读状态查询。`snapshot()` 返回 5 项快照（ZCode/壁纸/透明/阅读器/资源），
-  **探查失败不致命**（单项 null + `_meta.probeErrors`，整体仍 200）。透明走状态机（见下）+ 500ms 缓存。
+- `lib/status.cjs` —— 纯只读状态查询。`snapshot()` 返回 7 项快照（ZCode/壁纸/透明/阅读器/资源/
+  轮播/记忆-hindsight），**探查失败不致命**（单项 null + `_meta.probeErrors`，整体仍 200）。
+  透明走状态机（见下）+ 500ms 缓存。
 - `control/` —— 前端 SPA。`body{background:transparent !important}` 让壁纸透出（A1：页面自带透明 CSS，
   不依赖壁纸已注入）。浮动控件 + 书架管理。前端 lib 双导出（CommonJS + `window.__ccXxx`）。
+  Tab：总览/壁纸/阅读/皮肤/**记忆**（hindsight 管理面板，2026-09 加，见下面"hindsight 管理"章节）。
 
 ### 透明透壁纸的机制（实测确认，纠正了 brainstorm 里的误判）
 
@@ -1123,6 +1125,100 @@ scopeCss 后是 `#epub-content h1{color:blue}`，子元素的 color 声明优先
 
 ---
 
+## hindsight 管理（记忆服务控制台）
+
+第十种能力（2026-09）。给 ZCode 会话记忆插件 🧠 Hindsight 的**后台服务**套管理面板：
+状态/配置/记忆库/日志四视图 + 启动/停止按钮，住在控制中心的「记忆」tab。**不是新子系统**——
+是控制中心的一个新面板 + 一个域模块，对齐"控制中心是触发器 + 状态显示器"铁律。
+
+### 背景：self-hosted 模式（管理功能存在的原因）
+
+hindsight 的启动方式变过一代，**别按旧资料理解**：
+- **旧（daemon 模式，2026-09 前）**：配置 `~/.hindsight/coding-agent.json` 带
+  `serverMode:"daemon"` + `daemonProfile` + `daemonIdleTimeout`；插件的 `daemon-start.js`
+  在 SessionStart 时自动 `profile create --merge` + `hindsight-embed daemon start` 拉起服务。
+- **新（self-hosted 模式，本机现行）**：配置只有 `serverMode:"self-hosted"` + `apiUrl`
+  （本机 `http://127.0.0.1:9077`）+ `llm`（zai/glm-5.3，**apiKey 已在配置里，任何输出必须脱敏**）。
+  插件**绝不**自动启停服务——`daemon-start.js` 对非 daemon 模式直接 return（v0.3.4/v0.5.2
+  均如此，dist 里 grep `serverMode !== "daemon"` 可证）。服务由用户自己跑：本机是
+  `uv tool install` 持久安装的 `hindsight-embed`（v0.9.2），实际进程
+  `pythonw -m hindsight_api.main --daemon --idle-timeout 604800 --port 9077`，
+  归 profile `coding-agent` 管（`hindsight-embed -p coding-agent daemon status` 能看到；
+  **不带 -p 时查的是 default profile（8888），会误报 not running**）。
+
+self-hosted 下"没人管服务"就是这个面板补的空档：服务挂了 hooks/MCP 静默降级，
+总览的「记忆」行 + 「记忆」tab 给出可见状态和启停手段。
+
+### 组件
+
+- `lib/hindsight.cjs` —— 域模块（移植自姊妹项目 `C:\Users\johnl\Documents\dsh-hindsight-manager`
+  的 `src/hindsight.ts`，按 self-hosted 适配）：配置分层报告（默认值←env←文件←文件.harnesses.*，
+  镜像 hindsight 自己的 loadConfig）+ 脱敏（maskDeep：`/token|key|secret|password|apikey/i` 字段）、
+  `resolveRuntime` 聚合解析、health/version 探测、启停、banks/知识页树查询、日志 tail。
+  **不碰 CDP**（对齐 video-mute.cjs 的"写模块独立"定位）。
+- `lib/control-server.cjs` —— `/api/hindsight/*` 路由（status/config/banks/banks/:id/pages/logs
+  只读 + `server/start|stop` POST）。路径在 `/api/` 前缀下，cdp.filterTargets 天然排除出注入目标。
+- `control/lib/hindsight-view.js` —— 前端面板（双导出，对齐 status-view/skin-view 范式）。
+  4 个独立子容器 + "HTML 串相同则不碰 DOM"（5s 轮询重渲染不打断 `<details>` 展开态——
+  skin-view 的 select 被轮询冲掉是同型教训）。
+- `lib/status.cjs` —— 快照第 7 项 `hindsight`（running/serverMode/apiUrl/profile，非致命）。
+
+### 启停契约（self-hosted 适配的核心）
+
+- **启动**：detached spawn `hindsight-embed -p <profile> daemon start`（即忘；就绪靠 /health 轮询）。
+  **不再用** daemon-start.js——self-hosted 下它是 no-op（dsh manager 的老路径，别抄）。
+- **profile 怎么来**：配置里已经没有 daemonProfile 了——`resolveProfileForPort` 按 apiUrl 端口
+  扫 `~/.hindsight/profiles/*.env` 里 `HINDSIGHT_API_PORT=<port>` 反查（本机 9077→coding-agent，
+  真机验过 byPort=true）；匹配不到回退 "coding-agent"（前端标"默认，未匹配到端口"）。
+  profile 名进 spawn 参数前过 `isValidProfileName` 白名单（`/^[A-Za-z0-9][A-Za-z0-9_-]*$/`，
+  它来自文件名扫描，收口防注入）。
+- **停止**：Windows 先端口杀（`parseNetstatPids` latin1 宽松解码 netstat + `taskkill /T /F`）——
+  hindsight-embed CLI 的 `daemon stop` 在**中文 Windows 会崩**（严格 UTF-8 读 GBK 本地化 netstat 输出，
+  reader 线程 UnicodeDecodeError）；CLI stop 保留为非 Windows 首选与兜底。杀完重探（10×500ms）。
+- POST 是即时面（返回结果本身，无 jobId，对齐 muteVideo），不走 /api/action 全局锁。
+
+### 测试红线（重要）
+
+**POST `/api/hindsight/server/stop` 永远不进集成测试**——本机 9077 跑着真实记忆服务
+（AI 会话记忆全在里面），controlservertest 里端口杀它 = 杀掉用户数据服务。写路径逻辑由
+`hindsighttest.cjs` 纯函数覆盖（`parseNetstatPids` 的 GBK 样本、`startServer` 拒非法 profile、
+`coerceEnv`/分层/脱敏/端口反查）。读路由（status/config/banks/logs）在 controlservertest 有断言，
+**机况无关**（断言结构 + 优雅降级，不假设 running/banks 值——测试机可能没有 hindsight）。
+
+### 已知遗留
+
+- **启动依赖 `hindsight-embed` 在 PATH**（`uv tool install hindsight-embed`）。不在时状态页有
+  warn 横幅提示安装命令。
+- **两个 profile 同端口**：env 扫描按 readdir 顺序第一个匹配赢。极罕见（一个端口本来只能一个
+  服务），YAGNI 不做歧义处理。
+- **`hindsight-embed` CLI 自带 `ui start` / `control start`**（web UI 19077 / 配置向导 7878）——
+  和本面板是**三套独立管理面**，互不复用也不冲突；别想着"复用"它们的页面（跨进程 DOM 拿不到）。
+- **`llm` 配置小节**（provider/baseUrl/model/apiKey）不在 CONFIG_KEYS 表里（那是 v0.4 时代的
+  38 键面）——它只在"原始 JSON"折叠区以脱敏形式展示。要表格化得先对齐 v0.5+ 的完整键面，YAGNI。
+- **配置是只读展示**：本面板不改 `coding-agent.json`（改配置用 CLI 的 `control start` 或手编；
+  管理面写配置是另一个量级的坑——校验/原子写/热生效，YAGNI）。
+- **dsh-hindsight-manager 是姊妹实现不是共享代码**：两个项目运行时不同（ESM/TS vs CJS），
+  没法共享模块（教训 17 的"共享测试"在这里也不适用——两边测的纯函数集不同）。改本仓库的
+  启停逻辑时**别假设** dsh 侧跟着变，反之亦然。
+
+### 双记忆机制（工作约定，2026-09 用户拍板；同日二修为 hindsight 优先）
+
+AI 在本仓库工作时遵循**双记忆机制，hindsight 优先**：
+1. **查记忆 hindsight 优先**——需要项目历史上下文（决策的 why、跨会话细节、组件/约定）
+   先用 `hindsight_search_knowledge_pages` / `hindsight_reflect`，引用时标注
+   "> 🧠 From Hindsight memory"。本 AGENTS.md 和 ZCode 本地记忆
+   （`~/.zcode/cli/memories/.../MEMORY.md` 索引，会话自动加载）作补充与离线兜底。
+2. **写记忆两边都落**——产出值得记的知识（约定/状态/教训结论）时，hindsight（会话结束
+   自动 write-back，重要约定显式 ingest）之外，**必须同步写本地 markdown**（本地记忆文件
+   或本文件对应章节）。
+
+理由（2026-09-11 与用户对比讨论后定）：hindsight 覆盖面广（全量自动捕获 + 语义检索，
+被推翻的方案都留着），用户更看重，故查历史以它为先；本地 markdown 零依赖、即时加载
+（self-hosted 服务可能没跑），是关键事实的离线镜像——读可以靠后，写不能省。
+修订旧约定时两边一起改，并对 hindsight ingest Correction 文档（新版压过旧版）。
+
+---
+
 ## 壁纸轮播（定时随机切换）
 
 第六种能力。和前五种不同：它不改 ZCode 某一面，而是**驱动现有的注入子系统定时重跑**。
@@ -1186,7 +1282,7 @@ server 重启丢 handle 时，`stopRotateNow()` 走 pid kill 兜底（spec §8 �
 
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → epubtest → epubloadtest → epubservertest → scope-csstest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → epubtest → epubloadtest → epubservertest → scope-csstest → skintest → skininjecttest → hindsighttest → hindsightviewtest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `rotatetest.cjs` 测 `lib/rotate.cjs` 的纯函数：`pickRandomExcluding`（空池/单元素/排除上次/
@@ -1282,6 +1378,22 @@ XSS 已剥、img src 改写、cssHrefs 指向 asset 端点、prev/next、越界�
 浏览器 mirror，此测试立刻红——强迫双实现同步（scopeCss 在两个运行时各一份，跨环境无法共享代码）。
 case 列表含 body/html 映射的输入（`html{...}`/`BODY{...}`/`body, p{...}`/`body p{...}`/`body.night{...}`）
 显式覆盖镜像一致性。
+
+`hindsighttest.cjs` 测 `lib/hindsight.cjs` 纯函数：maskToken/maskDeep（嵌套/数组/非字符串）、
+coerceEnv（bool/list/number）、buildConfigReport 分层（默认值<env<文件<文件·harness，弱层来源标注、
+缺失/非法 JSON、apiToken+llm.apiKey 脱敏、bankSections/harnessSections）、runtimeView（self-hosted
+用 apiUrl / daemon 钉 127.0.0.1:port）、portFromUrl、resolveProfileForPort（端口命中/不命中回退/
+目录缺失/引号容错）、resolveRuntime 聚合、isValidProfileName（路径穿越/命令字符拒绝）、
+startServer 拒非法 profile（**唯一被测的写面分支**）、**parseNetstatPids**（ASCII/IPv6 括号形态/
+ESTABLISHED 不误匹/19077 不误匹 9077/**GBK-as-latin1 样本**——钉死中文 Windows 端口杀的解码对策）、
+embedCommand、tailFile、checkHealth/listBanks/bankPages 不可达优雅降级（连 127.0.0.1:1，不碰真实服务）。
+
+`hindsightviewtest.cjs` 测 `control/lib/hindsight-view.js` 纯渲染（对齐 statusviewtest 范式）：
+buildStatusHtml（运行/停止/忙三态、按钮 disabled 逻辑、embedAvailable 横幅、profile 按端口匹配标注、
+探测错误）、buildConfigHtml（分组表格、来源标注、envActive、原始 JSON 折叠、错误横幅）、
+sortBanks（last_write_at 倒序空值垫底）、buildBanksHtml（错误/空/列表/展开加载中/树渲染/树错误）、
+buildTreeHtml（folder/page 标记、嵌套缩进、HTML 转义）、buildLogsHtml（收起按钮/加载/双块/文件不存在）。
+DOM 接线（fetch/事件委托/节流）靠真机验（教训 12）。
 
 ## 改动惯例
 

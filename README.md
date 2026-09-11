@@ -3,8 +3,8 @@
 > 本项目使用 [ZCode](https://zcode.z.ai) + [GLM-5.2](https://bigmodel.cn) 协作开发。
 
 给 ZCode 桌面客户端做定制，**不修改 app.asar**，ZCode 升级后不会被覆盖。
-五种能力：**图片壁纸**、**视频壁纸**（把 `.mp4` 当动态背景播放）、**窗口透明**（让 ZCode 主窗口半透明，能透过它看到桌面）、**小说阅读器**（在 ZCode 浏览器面板里看本地 `.txt` / `.epub` 小说，带目录/书架/进度/多主题）、**书签管理**（在控制中心里维护常用网址，点击即在 ZCode 浏览器面板访问外部互联网站点）。
-前三者是改 ZCode 外观，阅读器和书签是独立子应用 —— 详见各章节。
+六种能力：**图片壁纸**、**视频壁纸**（把 `.mp4` 当动态背景播放）、**窗口透明**（让 ZCode 主窗口半透明，能透过它看到桌面）、**小说阅读器**（在 ZCode 浏览器面板里看本地 `.txt` / `.epub` 小说，带目录/书架/进度/多主题）、**书签管理**（在控制中心里维护常用网址，点击即在 ZCode 浏览器面板访问外部互联网站点）、**记忆服务管理**（在控制中心里管理 Hindsight 记忆服务的启停/配置/记忆库/日志）。
+前三者是改 ZCode 外观，阅读器和书签是独立子应用，记忆管理是控制中心的一个面板 —— 详见各章节。
 
 > 🆕 **控制中心**（`start.vbs`）：带界面的统一控制台，在一个透明 webview 面板里
 > 实时显示状态 + 一键操作壁纸/视频/透明/阅读器。**日常推荐双击 `start.vbs`**
@@ -21,7 +21,8 @@
 - **视频壁纸**：把 `.mp4` / `.webm` / `.mov` 注入成动态背景，`autoplay muted loop` 自动循环播放。
 - **窗口透明**：把 ZCode 主窗口设成半透明（0-100 自选），能透过窗口看到桌面。和图片/视频可叠加（半透明窗口 + 里面有壁纸）。
 - **小说阅读器**：在 ZCode 浏览器面板里看本地 `.txt` 小说，两级目录（卷/章）、滚动阅读、书架多本、进度记忆。
-- **控制中心**（`start.vbs`）：带界面的统一控制台——透明 webview 面板（能透出壁纸），实时显示 ZCode/壁纸/透明/阅读器/资源状态，一键操作所有功能，带书架管理（跳转/删除/加书）+ 书签管理（手动加常用网址，点击即在 webview 跳转访问，经中转页可后退回控制中心）。双击 `start.vbs` 无 cmd 黑窗（server 后台跑），只有 ZCode 弹出。
+- **控制中心**（`start.vbs`）：带界面的统一控制台——透明 webview 面板（能透出壁纸），实时显示 ZCode/壁纸/透明/阅读器/记忆服务状态，一键操作所有功能，带书架管理（跳转/删除/加书）+ 书签管理（手动加常用网址，点击即在 webview 跳转访问，经中转页可后退回控制中心）+ 记忆服务管理（见下）。双击 `start.vbs` 无 cmd 黑窗（server 后台跑），只有 ZCode 弹出。
+- **记忆服务管理**：控制中心「记忆」tab——给 🧠 Hindsight 记忆插件的后台服务套管理面板：运行状态 + 一键启停（self-hosted 模式下插件不再自动拉服务，挂了就静默丢记忆，这里给可见状态和恢复手段）、配置查看（分层生效值 + 来源标注，**敏感字段自动脱敏**）、记忆库浏览（各项目 bank 列表 + 知识页树）、双日志 tail。
 - **批量缩图**：相机原图（几十 MB）自动缩到可渲染的大小，增量处理、重复跑很快。
 - **解包 Apple Live Photo（`.livp`）**：iPhone 实况照片导出的 `.livp` 是个 zip 容器（里面装 1 张 JPEG + 1 段 MOV），`scripts/unpack-livp.cjs` 一键拆成项目能用的 jpg（进 `wallpapers/`）+ mov（进 `wallpapers-video/`），带防重名。
 - **一键移除**：撤掉已注入的壁纸，立即恢复默认外观（同时清掉图片 `<style>` 和视频 `<video>`）。
@@ -315,6 +316,39 @@ wallpaper.css 的覆盖规则。
 > （面板盖不满整个窗口，没被面板盖住的区域壁纸永远是满强度），已删除。现在是"全屏透明模式"：
 > 要么全显要么不显，没有中间态。字直接压在背景上，可读性只能靠选高对比、深色调的图/视频解决。
 
+## 8. 记忆服务管理（Hindsight 面板）
+
+给 [🧠 Hindsight](https://github.com/vectorize-io/hindsight) 记忆插件的**后台服务**套的管理面板，
+住在控制中心的「记忆」tab（总览页也有「记忆」状态行）。
+
+### 这是做什么的
+
+Hindsight 是给 AI 编码会话提供长期记忆的服务（每个仓库一个记忆库，自动沉淀决策理由、
+会话内容、知识页）。它的启动方式已从 daemon 模式改为 **self-hosted 模式**：插件只连接
+`apiUrl` 指向的服务，**不再自动启停**——服务没跑时记忆功能静默失效（🧠 横幅消失、hooks 降级），
+而且没人提醒你。这个面板补的就是这个空档：
+
+- **状态**：运行徽章（● 运行中 / ○ 已停止）+ API 版本 + 服务器模式 + 地址 + profile
+  （按 `apiUrl` 端口自动反查 `~/.hindsight/profiles/*.env`，匹配不到标注"默认"）
+- **启停**：「启动服务」后台 spawn `hindsight-embed -p <profile> daemon start`（异步，就绪靠
+  健康轮询）；「停止服务」在 Windows 先端口杀（hindsight-embed CLI 的 `daemon stop` 在
+  中文 Windows 会因 netstat GBK 解码崩溃，端口杀是既定对策），CLI 兜底
+- **配置**：`~/.hindsight/coding-agent.json` 全部配置项的**分层生效值**（默认值 ← 环境变量 ←
+  文件 ← 文件·harness 覆盖），每项标注来源；**敏感字段（apiToken / llm.apiKey 等）自动脱敏**，
+  只显示 `configured (••••xxxx)` 不回传明文
+- **记忆库**：全部 bank 列表（事实数 / 最后写入时间，按活跃度排序），展开任一 bank 看它的
+  知识页树（folder / page 嵌套）
+- **日志**：插件日志 + 服务日志（daemon）各取末尾 200 行，按需加载
+
+### 前置要求
+
+- 服务侧：`uv tool install hindsight-embed`（`hindsight-embed` 在 PATH，不在时状态页有提示）
+- 面板随控制中心启动，无额外步骤（`start.vbs` → 浏览器面板开 `http://127.0.0.1:17890/control/`
+  → 切「记忆」tab）
+
+> ℹ️ 只读展示不改配置；改配置用 `hindsight-embed control start`（CLI 自带的配置向导）或手编
+> `coding-agent.json`。面板的 server API 在 `/api/hindsight/*` 下（只绑本机回环）。
+
 ## 文件说明
 
 | 文件 | 作用 |
@@ -340,7 +374,8 @@ wallpaper.css 的覆盖规则。
 | `lib/reader-server.cjs` | 阅读器 HTTP server（扫 novels/、章节切分、API、端口自增、剪贴板） |
 | `lib/control-server.cjs` | 🆕 合并控制中心 server（静态托管 control/+reader/ + 小说/状态/动作 API + 书签中转页重定向；reader-server.cjs 现委托它） |
 | `lib/cdp.cjs` | 🆕 只读 CDP 共享模块（listTargets/connect/probeWallpaperMode + target 过滤），inject.cjs 也用它 |
-| `lib/status.cjs` | 🆕 纯只读状态查询（5 项快照 + 透明状态机 + 500ms 缓存） |
+| `lib/status.cjs` | 🆕 纯只读状态查询（7 项快照 + 透明状态机 + 500ms 缓存） |
+| `lib/hindsight.cjs` | 🆕 Hindsight 记忆服务域模块（配置分层报告+脱敏、端口反查 profile、健康探测、启停[Windows 端口杀优先]、banks/知识页查询、日志 tail） |
 | `lib/open-in-zcode.cjs` | 🆕 CDP 驱动 ZCode 地址栏打开 URL（备用工具，start.bat 当前未调用） |
 | `lib/reader-codec.cjs` | 编码检测（BOM/fatal-UTF8/GB18030，server 端） |
 | `lib/reader-toc.cjs` | 章节切分（卷/章正则 + 兜底，server 端） |
@@ -352,6 +387,7 @@ wallpaper.css 的覆盖规则。
 | `control/` | 🆕 控制中心前端 SPA（透明背景 + 浮动控件 + 书架管理 + 书签管理） |
 | `control/go.html` | 🆕 书签中转页（点书签先到这里显示目标 + 前往/返回按钮，再跳外部站；浏览器后退可回到这里） |
 | `control/lib/bookmark.js` | 🆕 书签纯函数库（URL 校验/规范化、协议白名单 http/https only、中转 URL 生成、localStorage 增删） |
+| `control/lib/hindsight-view.js` | 🆕 记忆面板前端（状态/配置/记忆库/日志四视图纯渲染 + 节流刷新接线；HTML 不变不碰 DOM，轮询不打断折叠态） |
 | `wallpapers/` | **放你的原图**（`.gitignore` 已忽略） |
 | `wallpapers-thumb/` | 缩图产物（inject 实际读这里，`.gitignore` 已忽略） |
 | `wallpapers-video/` | **放你的视频**（`.gitignore` 已忽略） |
@@ -402,7 +438,9 @@ npm test                # 跑全部测试
 
 - 调试端口 9222 仅监听本机回环（127.0.0.1），不对外网开放；
 - 注入的是纯 CSS + 一个 `<video>` DOM 元素，不读写文件、不上传数据；
-- 不修改、不替换 ZCode 的任何程序文件。
+- 不修改、不替换 ZCode 的任何程序文件；
+- 记忆面板的 server 只绑本机回环；展示 Hindsight 配置时**敏感字段（apiToken / llm.apiKey 等）
+  自动脱敏**为 `configured (••••xxxx)`，明文密钥不离开本机、不进日志、不进仓库。
 
 ## License
 

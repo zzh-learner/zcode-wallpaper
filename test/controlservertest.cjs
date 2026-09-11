@@ -100,6 +100,53 @@ function httpReq(method, url, body) {
     check("unmuteVideo -> has accepted field", typeof unmuteJson.accepted === "boolean");
     check("unmuteVideo -> NO jobId (instant path, not spawn)", typeof unmuteJson.jobId === "undefined");
 
+    // === hindsight 管理路由（self-hosted 模式）===
+    // 读真机的 ~/.hindsight/coding-agent.json + 探真实服务（本机 9077 可能开也可能关），
+    // 断言必须机况无关：结构 + 优雅降级，不假设 running/banks 的值。
+    // ⚠ 红线：POST /api/hindsight/server/stop 不在这里测 —— 会端口杀掉本机真实
+    // 记忆服务。写路径逻辑由 hindsighttest.cjs 纯函数覆盖（parseNetstatPids /
+    // startServer 拒非法 profile）。
+    const hsStatus = await httpReq("GET", base + "/api/hindsight/status");
+    check("/api/hindsight/status -> 200", hsStatus.status === 200);
+    var hsStatusJson = JSON.parse(hsStatus.body);
+    check("hindsight status: running boolean", typeof hsStatusJson.running === "boolean");
+    check("hindsight status: serverMode + apiUrl + profile", typeof hsStatusJson.serverMode === "string"
+      && typeof hsStatusJson.apiUrl === "string" && typeof hsStatusJson.profile === "string");
+    check("hindsight status: embedAvailable boolean + paths", typeof hsStatusJson.embedAvailable === "boolean"
+      && hsStatusJson.paths && typeof hsStatusJson.paths.daemonLog === "string");
+
+    const hsCfg = await httpReq("GET", base + "/api/hindsight/config");
+    check("/api/hindsight/config -> 200", hsCfg.status === 200);
+    var hsCfgJson = JSON.parse(hsCfg.body);
+    check("hindsight config: items array with key/group/source", Array.isArray(hsCfgJson.items)
+      && hsCfgJson.items.length > 0 && hsCfgJson.items.every(i => i.key && i.group && i.source));
+    check("hindsight config: exists boolean", typeof hsCfgJson.exists === "boolean");
+    // 敏感字段必须脱敏（apiToken 条目 + raw 里任何 *key* 字样；机况无关——有则必脱）
+    const tokItem = hsCfgJson.items.find(i => i.key === "apiToken");
+    if (tokItem && typeof tokItem.value === "string" && tokItem.value !== "") {
+      check("hindsight config: apiToken masked", tokItem.value.indexOf("configured") === 0);
+    }
+    if (hsCfgJson.raw && hsCfgJson.raw.llm && typeof hsCfgJson.raw.llm.apiKey === "string" && hsCfgJson.raw.llm.apiKey !== "") {
+      check("hindsight config: raw llm.apiKey masked", hsCfgJson.raw.llm.apiKey.indexOf("configured") === 0);
+    }
+
+    const hsBanks = await httpReq("GET", base + "/api/hindsight/banks");
+    check("/api/hindsight/banks -> 200 (graceful up or down)", hsBanks.status === 200);
+    var hsBanksJson = JSON.parse(hsBanks.body);
+    check("hindsight banks: banks array XOR error string", Array.isArray(hsBanksJson.banks)
+      ? hsBanksJson.banks.every(b => typeof b.bank_id === "string")
+      : typeof hsBanksJson.error === "string");
+
+    const hsLogs = await httpReq("GET", base + "/api/hindsight/logs?lines=5");
+    check("/api/hindsight/logs -> 200", hsLogs.status === 200);
+    var hsLogsJson = JSON.parse(hsLogs.body);
+    check("hindsight logs: pluginLog + daemonLog shapes", hsLogsJson.pluginLog && typeof hsLogsJson.pluginLog.path === "string"
+      && Array.isArray(hsLogsJson.pluginLog.lines) && hsLogsJson.daemonLog && typeof hsLogsJson.daemonLog.path === "string");
+    check("hindsight logs: lines param clamped (max 5)", hsLogsJson.pluginLog.lines.length <= 5 && hsLogsJson.daemonLog.lines.length <= 5);
+
+    const hs404 = await httpReq("GET", base + "/api/hindsight/nope");
+    check("/api/hindsight/nope -> 404", hs404.status === 404);
+
     // cleanup any .rotate.json the test wrote into tmp root
     try { require("fs").unlinkSync(path.join(root, ".rotate.json")); } catch (e) {}
   } finally { srv.close(); }
