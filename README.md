@@ -21,7 +21,7 @@
 - **视频壁纸**：把 `.mp4` / `.webm` / `.mov` 注入成动态背景，`autoplay muted loop` 自动循环播放。
 - **窗口透明**：把 ZCode 主窗口设成半透明（0-100 自选），能透过窗口看到桌面。和图片/视频可叠加（半透明窗口 + 里面有壁纸）。
 - **小说阅读器**：在 ZCode 浏览器面板里看本地 `.txt` 小说，两级目录（卷/章）、滚动阅读、书架多本、进度记忆。
-- **控制中心**（`start.vbs`）：带界面的统一控制台——透明 webview 面板（能透出壁纸），实时显示 ZCode/壁纸/透明/阅读器/记忆服务状态，一键操作所有功能，带书架管理（跳转/删除/加书）+ 书签管理（手动加常用网址，点击即在 webview 跳转访问，经中转页可后退回控制中心）+ 记忆服务管理（见下）。双击 `start.vbs` 无 cmd 黑窗（server 后台跑），只有 ZCode 弹出。
+- **控制中心**（`start.vbs`）：带界面的统一控制台——透明 webview 面板（能透出壁纸），实时显示 ZCode/壁纸/透明/阅读器/记忆服务状态，一键操作所有功能，带书架管理（跳转/删除/加书）+ 书签管理（手动加常用网址，点击即在 webview 跳转访问，经中转页可后退回控制中心）+ 记忆服务管理（见下）。ZCode 侧边栏空状态还有一张**「控制中心」入口卡片**，点一下自动开浏览器面板并进入控制中心（免手输 URL）。双击 `start.vbs` 无 cmd 黑窗（server 后台跑），只有 ZCode 弹出。
 - **记忆服务管理**：控制中心「记忆」tab——给 🧠 Hindsight 记忆插件的后台服务套管理面板：运行状态 + 一键启停（self-hosted 模式下插件不再自动拉服务，挂了就静默丢记忆，这里给可见状态和恢复手段）、配置查看（分层生效值 + 来源标注，**敏感字段自动脱敏**）、记忆库浏览（各项目 bank 列表 + 知识页树）、双日志 tail。
 - **批量缩图**：相机原图（几十 MB）自动缩到可渲染的大小，增量处理、重复跑很快。
 - **解包 Apple Live Photo（`.livp`）**：iPhone 实况照片导出的 `.livp` 是个 zip 容器（里面装 1 张 JPEG + 1 段 MOV），`scripts/unpack-livp.cjs` 一键拆成项目能用的 jpg（进 `wallpapers/`）+ mov（进 `wallpapers-video/`），带防重名。
@@ -242,8 +242,11 @@ GB18030 兜底。识别可疑的书带 ⚠️ 标记，顶栏可手动切编码�
 3. **以调试模式重启 ZCode**（带 `--remote-debugging-port=9222`，会先关掉当前 ZCode——这是 CDP 的必须代价）
 4. 后台启动控制中心 server（无窗口，URL 自动写剪贴板）
 
-双击后**只看到 ZCode 弹出**，没有 cmd 黑窗。然后在 ZCode **浏览器面板**地址栏粘贴
-`http://127.0.0.1:17890/control/` 回车。
+双击后**只看到 ZCode 弹出**，没有 cmd 黑窗。进入控制中心有两条路：
+
+- **推荐（免手输）**：点右侧面板空状态（"打开标签页"）里的**「控制中心」卡片**——
+  自动开浏览器面板并导航到控制中心（server 启动后约 3 秒内卡片就位）
+- **手动**：ZCode **浏览器面板**地址栏粘贴 `http://127.0.0.1:17890/control/` 回车
 
 > 💡 `start.vbs` 无窗启动；想看启动日志/排错时双击 `start.bat`（有 cmd 窗显示每一步）。
 > 想停止 server：再双击一次 `start.vbs`，它自动 kill 旧 server 后起新的。
@@ -278,9 +281,11 @@ GB18030 兜底。识别可疑的书带 ⚠️ 标记，顶栏可手动切编码�
 
 ### 已知边界
 
-- **自动打开面板没做**：曾尝试用 CDP 自动在 ZCode 浏览器面板打开控制中心，但 ZCode 在
-  git working tree 有未提交修改时默认开审查面板（不是浏览器面板），自动打开太不可靠，已移除。
-  需手动开浏览器面板 + 粘 URL。
+- **入口卡片只在侧边栏空状态可见**：浏览器面板已开着（有标签）时空状态不在 DOM，卡片
+  随之不显示——这时回控制中心用地址栏/浏览器后退（覆盖的是最高频场景：ZCode 启动后
+  第一次进控制中心）。早期曾尝试"CDP 全自动打开面板"，因 ZCode 在 git working tree
+  脏时默认开审查面板（不是浏览器面板）不可靠而放弃；现在的入口卡片是折中方案：
+  面板开没开都不用输 URL，最多点一下。
 - **书架进度**：reader 和控制中心共享同一个 localStorage（同 origin），在 reader 读到新章节后，
   回控制中心书架会显示更新（控制中心每 2 秒重读）。
 
@@ -373,6 +378,8 @@ Hindsight 是给 AI 编码会话提供长期记忆的服务（每个仓库一个
 | `lib/windowselect.cjs` | 窗口选择规则纯函数（`transparent.ps1` 的 JS 镜像，供单测） |
 | `lib/reader-server.cjs` | 阅读器 HTTP server（扫 novels/、章节切分、API、端口自增、剪贴板） |
 | `lib/control-server.cjs` | 🆕 合并控制中心 server（静态托管 control/+reader/ + 小说/状态/动作 API + 书签中转页重定向；reader-server.cjs 现委托它） |
+| `lib/sidebar-entry.cjs` | 🆕 侧边栏「控制中心」入口卡片（向 ZCode 主页面注入：空状态克隆一张卡片，点击自动开浏览器面板并导航到 control；3s 自愈 + URL 走 DOM 属性不进注入源） |
+| `lib/webview-blankfix.cjs` | webview `_blank` 链接修复（后台 3s 轮询注册剥 `target` 脚本到外部站 webview；本轮加 sync 防重入守卫修孤儿 ws） |
 | `lib/cdp.cjs` | 🆕 只读 CDP 共享模块（listTargets/connect/probeWallpaperMode + target 过滤），inject.cjs 也用它 |
 | `lib/status.cjs` | 🆕 纯只读状态查询（7 项快照 + 透明状态机 + 500ms 缓存） |
 | `lib/hindsight.cjs` | 🆕 Hindsight 记忆服务域模块（配置分层报告+脱敏、端口反查 profile、健康探测、启停[Windows 端口杀优先]、banks/知识页查询、日志 tail） |
@@ -421,6 +428,7 @@ npm test                # 跑全部测试
 | 壁纸/视频太花看不清字 | 背景直接压在字下，可读性靠选高对比、深色调、构图简洁的图/视频解决，CSS 这层无能为力 |
 | 窗口透明"没找到进程" | 默认按进程名 `ZCode` 找。用 `Get-Process` 看真实名，再 `bin\transparent.bat -ProcessName <真实名>` |
 | 窗口透明看不到效果 | 透明度调太低（如 0-20）字也几乎看不见。调高到 60-80 试试。改透明度重跑场景 9/10 |
+| 侧边栏没有「控制中心」卡片 | ① 卡片只在面板空状态（"打开标签页"）显示，面板开着时看不到，关掉标签试试 ② ZCode 必须调试模式启动（`start.vbs`）且控制中心 server 在跑，两者任一没有则注入静默失效 ③ ZCode 更新改了 UI 结构时，跑 `node scripts/inspect-sidebar.cjs` 重新探测 |
 | 侧边栏有一块深色盖住背景 | ZCode 框架硬画的实色背景，不走任何覆盖的 CSS 变量，CSS 改不动。已知遗留 |
 | 阅读器打不开 | 确认服务窗口还开着；URL 端口对（端口冲突会自动 +1，看服务窗口打印的实际端口）；直接双击 `bin/reader-server.bat` 看输出 |
 | 阅读器书架空 | 刷新 webview 标签（F5）；确认服务窗口还开着、`novels/` 有 `.txt`；服务启动后新加的书要重启服务才扫到 |

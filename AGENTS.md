@@ -1251,6 +1251,89 @@ AI 在本仓库工作时遵循**双记忆机制，hindsight 优先**：
 
 ---
 
+## 侧边栏控制中心入口（主页面注入）
+
+第十一种能力（2026-09）。给控制中心一个**一键入口**：ZCode 右侧面板的空状态
+（"打开标签页"：辅助对话/审查/终端/浏览器/Wiki 引用）里多出一张**「控制中心」卡片**，
+点一下 = 浏览器面板打开 + 自动导航到 `http://127.0.0.1:<port>/control/`，
+用户不再手输 URL。对齐书签功能的动机（省掉手输），但机制完全不同。
+
+### 机制：`lib/sidebar-entry.cjs`（对齐 webview-blankfix 范式）
+
+- control-server listen 成功后起 3s sync（**需要实际端口**，端口漂移也要填对 URL），
+  对主 renderer page target（`filterPageTargets`：type=page + URL 含
+  `/app.asar/out/renderer/index.html`，**正向匹配单一页面种类**，不复用
+  cdp.filterTargets——那一个是"排除工具页的通用集合"，目的不同）注册
+  `addScriptToEvaluateOnNewDocument` + 一次性 `Runtime.evaluate`。
+- 注入源 `buildEntrySource()`：DOM 幂等（查 `[data-zz-control-entry]`）→ 找
+  `.side-pane-open-tab-list` → **克隆**第一张现有卡片（样式天然一致）→ 改 label
+  "控制中心"、换 svg path（Heroicons adjustments）→ appendChild。外加
+  `setInterval(install,1500)` 自愈：面板打开时 React 把空状态子树整个删掉，
+  面板关闭时重建的子树没有我们的卡——定时器无条件重插，**不去猜 React 的
+  reconcile 行为**（教训 21）。
+- 点击链（卡片原生 addEventListener，不依赖 React 认领我们的节点）：
+  1. dispatch 原生 `MouseEvent('click',{bubbles:true})` 到"浏览器"卡片开面板
+     ——真机验过 React 认原生 click（不认的是合成 keydown，教训 23）；
+  2. 100ms 轮询等地址栏 `input[data-testid="browser-address-input"]`；
+  3. **React 受控组件标准赋值**（native value setter + 派发 `input` 事件）
+     + `inp.form.requestSubmit()`——让 ZCode 自己开标签管理导航
+     （教训 23 子坑 C 的原生提交路径）。**不走 `webview.loadURL`**：
+     面板空态下没有激活的 webview 元素可驱动，且绕过 ZCode 标签管理。
+
+### 关键设计：URL 不进注入源（world 安全，教训 28）
+
+`Runtime.evaluate` 可能跑在 isolated world，window 全局不跨 world 共享。所以：
+- 幂等标志不用 `window.__xxx`，用 **DOM 存在性**；
+- 目标 URL 不 bake 进注入源，由 server 每个 sync tick 用
+  `setEntryUrlExpression(port)` 写进卡片 DOM 属性 `data-control-url`
+  （DOM 跨 world 共享）；handler 点击时读自己节点的属性。
+- 好处：`buildEntrySource()` 零参数零 URL，端口漂移/页面重载都不需要重装脚本，
+  下一个 3s tick 自动补对 URL。
+
+### 真机验证（2026-09-14，全链路 1 秒内）
+
+`scripts/verify-entry-card.cjs`（关面板回空态 → 等卡出现 + URL 填充）+
+`scripts/verify-entry-click.cjs`（点卡 → 地址栏提交 → `/control/` webview
+target 出现）。空状态实际有 **6 张卡**（辅助对话/审查/终端/浏览器/Wiki 引用 +
+我们的），不是截图可见的 3 张。
+
+⚠️ **验证脚本的教训：别宽泛匹配"关闭"类按钮。** verify-entry-card 最初用
+`/close|关闭/i` 匹配关闭按钮，命中了**整个 ZCode 窗口的"关闭窗口"按钮**
+（`window-control-close`）并 dispatch 了合成点击——合成点击不可信（isTrusted
+=false）窗口没关，但这是在悬崖边试探。以后凡是点"关闭/删除"类按钮的探测，
+必须精确匹配 testid 或上下文。
+
+### 附带挖出的存量 bug：`opts.port || DEFAULT_PORT` 吞掉 port:0（教训 30）
+
+实现本能力后 `npm test` 开始挂死在 epubservertest（46 断言全过但进程不退）。排查链：
+netstat 无 socket → `_getActiveHandles()` 打印剩 2 个 Socket → 端点 127.0.0.1:9222 →
+patch createServer 看调用栈 → **`opts.port || DEFAULT_PORT` 把测试传的 `port: 0`（随机
+端口语义）当成 falsy 吞成 17890**。epubservertest 的 server 撞上用户常驻的真 control-server
+（17890）→ EADDRINUSE 漂移到 17891 → 测试进程里多出一个"意外 server"，它的 listen 回调 +
+entry/blankfix sync 并发对同一 target 双注册 CDP ws，Map 键覆盖后第一条成孤儿没人关，
+事件循环永远不空。**历史全绿只是因为跑测试时 17890 恰好没人占**。修复：显式
+`=== undefined/null` 判断。
+
+教训补丁：
+30. **可选数字参数的默认值判断禁用 `||`**——`0`/`""` 都是 falsy。凡 `opts.xxx || 默认值`
+    的写法，先问"0 是不是合法值"。端口类参数尤其危险：吞掉的不是报错而是"悄悄换了一个
+    语义"（随机端口→固定端口），和教训 1 的"以为在调 A 其实控制 B"同型。
+31. **"轮询注册长连接"的 manager（sync/close 模式）三件套是标配**：`closedFlag`（close 后
+    在途 sync 不落新 ws）、`syncing` 重入守卫（慢 sync 撞上下一个 tick）、落表后二次检查。
+    缺任何一条，测试进程/常驻进程都会被孤儿连接挂住——且只在"目标端真有可注册对象"时
+    暴露（本例：用户开着 4 个 webview + control 页），平时全绿是假象。
+
+### 已知边界
+
+- **入口只在空状态可见**：浏览器面板开着（有标签）时空状态不在 DOM，卡片也随之
+  不在——想回控制中心用地址栏/后退（现状不变）。覆盖的是最高频场景
+  （ZCode 启动后第一次进控制中心）。
+- **ZCode 不带 debug port 时失效**：sync 连不上 9222 静默 no-op（对齐 blankfix）。
+- **ZCode 更新可能改 DOM**：卡片选择器/地址栏 testid 都是 ZCode UI 实现细节，
+  更新后失效时先用 `scripts/inspect-sidebar.cjs` 重新探测结构。
+
+---
+
 ## 壁纸轮播（定时随机切换）
 
 第六种能力。和前五种不同：它不改 ZCode 某一面，而是**驱动现有的注入子系统定时重跑**。
@@ -1314,7 +1397,7 @@ server 重启丢 handle 时，`stopRotateNow()` 走 pid kill 兜底（spec §8 �
 
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → epubtest → epubloadtest → epubservertest → scope-csstest → hindsighttest → hindsightviewtest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → sidebarentrytest → epubtest → epubloadtest → epubservertest → scope-csstest → hindsighttest → hindsightviewtest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `rotatetest.cjs` 测 `lib/rotate.cjs` 的纯函数：`pickRandomExcluding`（空池/单元素/排除上次/
@@ -1385,6 +1468,15 @@ localStorage 读写函数不测（对齐 shelftest 只测纯函数的边界，�
 还用手写 fake DOM（不引入 jsdom，YAGNI）跑 SOURCE 验语义：预置 `_blank` 被剥、动态 append 的被
 observer 剥、重跑幂等不叠加 observer。`blankfixManager.sync/close` 不测（跨进程 CDP 胶水，
 教训 12/13，靠真机验）。
+
+`sidebarentrytest.cjs` 测 `lib/sidebar-entry.cjs`（见"侧边栏控制中心入口"章节）：
+`filterPageTargets`（正向匹配主 renderer、拒 webview/devtools/工具页/外部页/无 wsUrl）、
+`buildEntrySource` 关键字断言（幂等 flag/克隆卡片/label/requestSubmit/自愈循环/IIFE、
+**SOURCE 零 URL 断言**——URL 走 DOM 属性，防止有人把端口 bake 回注入源）、
+`setEntryUrlExpression`（URL 填充/尾斜杠归一/无卡 no-op）、fake DOM 语义测试（插卡/
+幂等重跑/点击链：无 URL no-op → dispatch 浏览器卡 → 100ms 轮询 → native setter 设值 +
+input 事件 + requestSubmit；面板已开时直接提交地址栏）。`sync/close` 不测（跨进程 CDP
+胶水，对齐 blankfix 边界）。
 
 `epubtest.cjs` 测 `lib/epub.cjs` 的纯函数：`scopeCss`（选择器加前缀、**body/html 整词映射到容器本身**
 `#epub-content`、`body p`/`body.night` 等非整词不映射、大小写不敏感、`@media` 递归、`@font-face`
