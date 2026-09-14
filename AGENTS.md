@@ -16,7 +16,7 @@
 
 | 用途 | 命令 |
 | --- | --- |
-| 跑全量测试（32 个 test 文件，顺序串行） | `npm test` |
+| 跑全量测试（30 个 test 文件，顺序串行） | `npm test` |
 | 注入图片壁纸（独立跑，需 ZCode 已带 9222 端口） | `npm run inject` |
 | 注入视频壁纸 | `npm run inject:video` |
 | 移除注入 | `npm run remove` |
@@ -747,7 +747,7 @@ CDP `/json` 返回的 webview `webSocketDebuggerUrl` 是 `ws://localhost/devtool
   透明走状态机（见下）+ 500ms 缓存。
 - `control/` —— 前端 SPA。`body{background:transparent !important}` 让壁纸透出（A1：页面自带透明 CSS，
   不依赖壁纸已注入）。浮动控件 + 书架管理。前端 lib 双导出（CommonJS + `window.__ccXxx`）。
-  Tab：总览/壁纸/阅读/皮肤/**记忆**（hindsight 管理面板，2026-09 加，见下面"hindsight 管理"章节）。
+  Tab：总览/壁纸/阅读/**记忆**（hindsight 管理面板，2026-09 加，见下面"hindsight 管理"章节）。
 
 ### 透明透壁纸的机制（实测确认，纠正了 brainstorm 里的误判）
 
@@ -1158,9 +1158,9 @@ self-hosted 下"没人管服务"就是这个面板补的空档：服务挂了 ho
   **不碰 CDP**（对齐 video-mute.cjs 的"写模块独立"定位）。
 - `lib/control-server.cjs` —— `/api/hindsight/*` 路由（status/config/banks/banks/:id/pages/logs
   只读 + `server/start|stop` POST）。路径在 `/api/` 前缀下，cdp.filterTargets 天然排除出注入目标。
-- `control/lib/hindsight-view.js` —— 前端面板（双导出，对齐 status-view/skin-view 范式）。
+- `control/lib/hindsight-view.js` —— 前端面板（双导出，对齐 status-view 范式）。
   4 个独立子容器 + "HTML 串相同则不碰 DOM"（5s 轮询重渲染不打断 `<details>` 展开态——
-  skin-view 的 select 被轮询冲掉是同型教训）。
+  早期面板的 select 选择被轮询冲掉是同型教训）。
 - `lib/status.cjs` —— 快照第 7 项 `hindsight`（running/serverMode/apiUrl/profile，非致命）。
 
 ### 启停契约（self-hosted 适配的核心）
@@ -1282,7 +1282,7 @@ server 重启丢 handle 时，`stopRotateNow()` 走 pid kill 兜底（spec §8 �
 
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → epubtest → epubloadtest → epubservertest → scope-csstest → skintest → skininjecttest → hindsighttest → hindsightviewtest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → epubtest → epubloadtest → epubservertest → scope-csstest → hindsighttest → hindsightviewtest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `rotatetest.cjs` 测 `lib/rotate.cjs` 的纯函数：`pickRandomExcluding`（空池/单元素/排除上次/

@@ -1,6 +1,6 @@
 // One-off probe: why does the control page render on a white background?
 // Dumps (1) all CDP targets, (2) control page computed backgrounds + loaded
-// styles + active skin id, (3) main page wallpaper/skin injection state and
+// styles, (3) main page wallpaper injection state and
 // the webview ancestor chain (what actually sits behind the control page).
 const http = require("http");
 const { WebSocket } = require("ws");
@@ -57,8 +57,6 @@ const controlExpr = `(function(){
   }
   var styleIds = [];
   document.querySelectorAll('style[id]').forEach(function(s){ styleIds.push(s.id); });
-  var skins = null;
-  try { skins = JSON.parse(localStorage.getItem('zcode-control:skins')||'null'); } catch(e) {}
   return JSON.stringify({
     href: location.href,
     html: bg(document.documentElement),
@@ -66,8 +64,6 @@ const controlExpr = `(function(){
     panel: bg(document.querySelector('.panel')),
     styleIds: styleIds,
     sheetHrefs: Array.from(document.styleSheets).map(function(s){ return s.href ? s.href.split('/').pop() : '(inline)'; }),
-    activeSkin: skins ? skins.activeId : null,
-    themeCount: skins && skins.themes ? Object.keys(skins.themes).length : 0
   }, null, 2);
 })()`;
 
@@ -83,8 +79,6 @@ const mainPageExpr = `(function(){
   }
   var wp = document.getElementById('zcode-user-wallpaper');
   var video = document.getElementById('zcode-user-wallpaper-video');
-  var skin = document.getElementById('zcode-user-skin');
-  var skinChrome = document.getElementById('zcode-user-skin-chrome');
   var wv = document.querySelector('webview, [data-testid="browser-webview"]');
   var chain = [];
   var node = wv, n = 0;
@@ -92,8 +86,6 @@ const mainPageExpr = `(function(){
   return JSON.stringify({
     wallpaperStyle: wp ? { cssRules: (wp.textContent||'').length } : null,
     videoEl: video ? { src: (video.getAttribute('src')||'').slice(0,60), muted: video.muted } : null,
-    skinStyle: skin ? { len: (skin.textContent||'').length, head: (skin.textContent||'').slice(0,300) } : null,
-    skinChrome: skinChrome ? { len: (skinChrome.textContent||'').length } : null,
     body: desc(document.body),
     main: desc(document.querySelector('main, [role=\"main\"]')),
     sidebar: desc(document.querySelector('#sidebar')),
@@ -119,7 +111,7 @@ const mainPageExpr = `(function(){
 
   const page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
   if (page) {
-    console.log("\n=== MAIN PAGE: wallpaper/skin state + webview ancestors ===");
+    console.log("\n=== MAIN PAGE: wallpaper state + webview ancestors ===");
     const c = await connect(page.webSocketDebuggerUrl);
     console.log(await ev(c.call, mainPageExpr));
     c.ws.close();

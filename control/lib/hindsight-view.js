@@ -1,4 +1,4 @@
-// Hindsight 面板渲染 + 接线。镜像 status-view.js / skin-view.js 形态：
+// Hindsight 面板渲染 + 接线。镜像 status-view.js 形态：
 // 纯渲染函数（state JSON -> HTML 字符串）+ IIFE 接线（节流刷新、事件委托）。
 // 双导出：CommonJS 供 Node 测（hindsightviewtest.cjs）+ window.__ccHindsightView。
 //
@@ -8,7 +8,7 @@
 //
 // 渲染策略：panel 内 4 个独立子容器（status/config/banks/logs），各自
 // "HTML 串相同则不碰 DOM"——5s 轮询重渲染不会打断 <details> 展开态和滚动位置，
-// 只有数据真变了才重建对应区块（skin-view 的 select 选择被轮询冲掉的教训同型）。
+// 只有数据真变了才重建对应区块（早期面板的 select 选择被轮询冲掉是同型教训）。
 (function () {
   var REFRESH_MS = 5000; // control.js poll 2s 一次调 tick()，这里节流到 5s 实际刷新
 

@@ -1,5 +1,5 @@
 // SVG 图标常量（Lucide 风格，spec §10）。UI 系统图标用 SVG 跨平台一致；
-// 用户内容（skin 角标 emoji）保留不换。
+// 用户内容（自定义 emoji 角标等）保留不换。
 // Dual export: CommonJS（Node 测）+ window.__ccIcons（浏览器用）。
 var ICONS = {
   volume: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>',

@@ -16,10 +16,7 @@
       panes[j].classList.toggle("active", panes[j].getAttribute("data-pane") === name);
     }
     try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
-    // 切到皮肤 Tab 时立即渲染一次（避免首次进入空白）；记忆 Tab 同理立即拉一次
-    if (name === "skin" && window.__ccSkinView) {
-      try { window.__ccSkinView.renderSkinPanel(); } catch (e) {}
-    }
+    // 切到记忆 Tab 时立即拉一次（避免首次进入空白）
     if (name === "hindsight" && window.__ccHindsightView) {
       try { window.__ccHindsightView.refresh(); } catch (e) {}
     }
@@ -28,7 +25,7 @@
     var saved = null;
     try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
     // 只接受已知 Tab 名
-    var valid = { overview: 1, wallpaper: 1, reader: 1, skin: 1, hindsight: 1 };
+    var valid = { overview: 1, wallpaper: 1, reader: 1, hindsight: 1 };
     activateTab(saved && valid[saved] ? saved : "overview");
   })();
   document.getElementById("tabs").addEventListener("click", function (e) {
@@ -87,15 +84,6 @@
     }).catch(function () { /* keep last cached */ }).then(function () {
       if (window.__ccShelf) renderShelf();
       if (window.__ccBookmark) renderBookmarks();
-      // skin panel: re-render each poll so active state + editor stay fresh.
-      // renderSkinPanel reads its own state from localStorage; the status snapshot
-      // (st) is only used for the "current: <name>" status line and is optional.
-      // Wrapped in try/catch because a skin-view error must NOT break the rest of
-      // the poll (shelf/bookmark already rendered above).
-      if (window.__ccSkinView) {
-        try { window.__ccSkinView.renderSkinPanel(); }
-        catch (e) { /* skin render error non-fatal */ }
-      }
       // hindsight 面板：tick 内部自带 5s 节流 + tab 可见检查，每 2s poll 直接调即可
       if (window.__ccHindsightView) {
         try { window.__ccHindsightView.tick(); }
@@ -103,8 +91,6 @@
       }
     });
   }
-  // expose poll so skin-view can trigger an immediate refresh after apply/remove
-  window.__ccPoll = poll;
 
   function dispatchAction(action, params) {
     var body = JSON.stringify(Object.assign({ action: action }, params || {}));
