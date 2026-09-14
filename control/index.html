@@ -3,14 +3,29 @@
 <head>
 <meta charset="utf-8">
 <title>ZCode 控制中心</title>
+<script>
+/* 首帧前定主题，避免浅色用户看到深色闪一下。localStorage 覆盖 >
+   prefers-color-scheme 兜底（CDP status 探测的细化在 control.js 里做）。 */
+(function () {
+  try {
+    var s = localStorage.getItem("zcode-control:theme");
+    var t = (s === "light" || s === "dark") ? s
+      : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) { /* 存储不可用：保持 :root 深色默认 */ }
+})();
+</script>
 <link rel="stylesheet" href="control.css">
 </head>
-<body>
+<body class="no-wallpaper">
+  <!-- no-wallpaper 预置：首帧前按主题色铺底（webview 内联白底会从全透明页漏出），
+       control.js 首次 poll 按 status.wallpaper.mode 纠正（注了壁纸则移除）。 -->
   <div id="tabs" class="tab-bar">
     <button class="tab active" data-tab="overview">总览</button>
     <button class="tab" data-tab="wallpaper">壁纸</button>
     <button class="tab" data-tab="reader">阅读</button>
     <button class="tab" data-tab="hindsight">记忆</button>
+    <button id="theme-toggle" class="theme-toggle" title="配色">🌓</button>
   </div>
   <div id="tab-content">
     <section class="tab-pane active" data-pane="overview">

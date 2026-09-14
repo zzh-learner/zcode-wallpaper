@@ -33,6 +33,41 @@
     if (t) activateTab(t);
   });
 
+  // ---- 主题（浅/深跟随 ZCode）----
+  // auto 模式用 webview 自己的 matchMedia（Electron nativeTheme）。真机验证
+  // 2026-09：ZCode 切深色时它即时跟随；而 ZCode <html> 的 theme-zai-* class
+  // 不跟随切换（切深色后仍是 theme-zai-light），不可信——曾做过的 CDP class
+  // 探测因此撤销。index.html 头部脚本已在首帧前按同一信号设过 data-theme。
+  // 优先级：localStorage 固定值（🌓 按钮三态）> matchMedia。
+  var THEME_KEY = "zcode-control:theme";
+  function getThemePref() {
+    try {
+      var v = localStorage.getItem(THEME_KEY);
+      return (v === "light" || v === "dark") ? v : "auto";
+    } catch (e) { return "auto"; }
+  }
+  function resolveAutoTheme() {
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function applyTheme() {
+    var pref = getThemePref();
+    var t = pref !== "auto" ? pref : resolveAutoTheme();
+    document.documentElement.setAttribute("data-theme", t);
+    var btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.textContent = t === "dark" ? "🌙" : "☀️";
+      btn.title = "配色：" + (pref === "auto" ? "跟随 ZCode" : pref === "light" ? "固定浅色" : "固定深色") + "，点击切换";
+    }
+  }
+  // 三态循环：跟随 ZCode -> 固定浅色 -> 固定深色 -> 跟随…
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    var order = ["auto", "light", "dark"];
+    var next = order[(order.indexOf(getThemePref()) + 1) % order.length];
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    applyTheme();
+  });
+  applyTheme();
+
   function setStatusHtml(html) {
     var el = document.getElementById("status-panel");
     if (el) el.innerHTML = html;
@@ -58,6 +93,12 @@
   function poll() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (st) {
       setStatusHtml(window.__ccStatusView.renderStatus(st));
+      applyTheme();
+      // 无壁纸时铺主题色不透明底：webview 元素带 ZCode 的内联白底
+      // （browser-use-viewport），页面全透明时白底会漏出来；注了壁纸则恢复
+      // 全透明（A1：壁纸从底层透出，压制 webview 白底靠 wallpaper.css）。
+      var hasWallpaper = !!(st.wallpaper && st.wallpaper.mode !== "none");
+      document.body.classList.toggle("no-wallpaper", !hasWallpaper);
       var cdpOk = !!(st.zcode && st.zcode.running);
       // webview _blank fix availability hint (spec §7 已知遗留):
       // blankfix needs debug port. When port closed (cdpOk=false), warn user

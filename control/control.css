@@ -1,7 +1,8 @@
 /* A1: transparent background so ZCode wallpaper shows through (spec §2/§4 B1).
    The page itself paints transparent; wallpaper comes from ZCode body below. */
 :root {
-  /* 玻璃面板（均衡路线，spec §3/§4） */
+  color-scheme: dark;
+  /* 玻璃面板（均衡路线，spec §3/§4）——深色为默认（JS 未跑/探测失败兜底） */
   --glass-bg:          rgba(28, 28, 36, 0.55);
   --glass-bg-elevated: rgba(44, 44, 54, 0.65);
   --glass-blur:        24px;
@@ -16,7 +17,18 @@
   --radius-card:    12px;
   --radius-control: 10px;
 
-  /* macOS 系统调色板（spec §3） */
+  /* 控件面（按钮/输入框/列表 hover/tab 栏/发丝线） */
+  --btn-bg:        rgba(255, 255, 255, 0.10);
+  --btn-bg-hover:  rgba(255, 255, 255, 0.18);
+  --input-bg:      rgba(0, 0, 0, 0.30);
+  --list-hover:    rgba(255, 255, 255, 0.22);
+  --tabbar-bg:     rgba(0, 0, 0, 0.25);
+  --tab-active-bg: rgba(255, 255, 255, 0.18);
+  --tab-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --tab-hover-bg:  rgba(255, 255, 255, 0.06);
+  --hairline:      rgba(255, 255, 255, 0.08);
+
+  /* macOS 系统调色板（spec §3；accent 蓝两主题通用） */
   --accent:         #0a84ff;
   --accent-hover:   #3d94ff;
   --accent-pressed: #0060df;
@@ -28,6 +40,9 @@
   /* 文字层级 */
   --text-primary:   rgba(255, 255, 255, 0.96);
   --text-secondary: rgba(235, 235, 245, 0.6);
+  --text-shadow:    0 1px 2px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9);
+  /* 无壁纸时的整页底色（取面板玻璃色调的实色） */
+  --page-bg:        #1c1c24;
 
   /* Type scale */
   --fs-xs:   11px;
@@ -44,10 +59,53 @@
   --space-5: 24px;
 }
 
+/* 浅色主题（跟随 ZCode 浅色）。html[data-theme] 由前端设置，优先级：
+   localStorage 覆盖 > prefers-color-scheme 兜底（webview matchMedia 实测
+   跟随 ZCode nativeTheme；theme-zai class 不跟随切换，不可用——教训 21 再版）。 */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --glass-bg:          rgba(255, 255, 255, 0.62);
+  --glass-bg-elevated: rgba(255, 255, 255, 0.78);
+  --glass-border:      rgba(0, 0, 0, 0.10);
+  --glass-border-strong: rgba(0, 0, 0, 0.18);
+  --glass-shadow:      0 8px 32px rgba(0, 0, 0, 0.12);
+  --glass-highlight:   inset 0 1px 0 rgba(255, 255, 255, 0.60);
+
+  --btn-bg:        rgba(0, 0, 0, 0.05);
+  --btn-bg-hover:  rgba(0, 0, 0, 0.09);
+  --input-bg:      rgba(255, 255, 255, 0.75);
+  --list-hover:    rgba(0, 0, 0, 0.06);
+  --tabbar-bg:     rgba(0, 0, 0, 0.05);
+  --tab-active-bg: rgba(255, 255, 255, 0.85);
+  --tab-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --tab-hover-bg:  rgba(0, 0, 0, 0.04);
+  --hairline:      rgba(0, 0, 0, 0.08);
+
+  /* 语义色加深保证浅底可读（原 #30d158/#ffd60a 在白底上看不清） */
+  --ok:   #248a3d;
+  --warn: #b25000;
+  --err:  #d70015;
+  --muted: rgba(60, 60, 67, 0.50);
+
+  --text-primary:   rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(60, 60, 67, 0.60);
+  --text-shadow:    none;
+  /* 无壁纸时的整页底色（ZCode 浅色实测 --color-background: #f8f8f8） */
+  --page-bg:        #f8f8f8;
+}
+
 html, body { margin: 0; height: 100%; background: transparent !important; color: var(--text-primary);
   font-family: "Microsoft YaHei", system-ui, sans-serif; font-size: var(--fs-base);
-  /* text-shadow 兜底：面板内透明区域文字仍有轮廓（教训2）。alpha 0.55 + blur 24 后非唯一来源。*/
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 1px rgba(0, 0, 0, 0.9); }
+  /* text-shadow 兜底：面板内透明区域文字仍有轮廓（教训2）。深色主题保留，
+     浅色主题 --text-shadow: none（深色描边在浅底上是脏边）。*/
+  text-shadow: var(--text-shadow); }
+
+/* 无壁纸注入时铺主题色不透明底（body.no-wallpaper 由 control.js 按
+   status.wallpaper.mode 开关，index.html 预置避免白底闪现）。原因：ZCode 的
+   <webview> 元素带内联白底（browser-use-viewport，2026-09 ZCode 更新引入），
+   只有壁纸注入时的 wallpaper.css 才压掉它——壁纸没注时页面全透明 = 漏出大白底。
+   注了壁纸则保持 A1 全透明，壁纸从底层透出。 */
+body.no-wallpaper { background: var(--page-bg) !important; }
 
 /* 玻璃面板（均衡路线，spec §4）：alpha 0.55 + blur 24 + saturate 180 + 投影 + 顶部高光。
    替换原 rgba(20,20,24,0) 全透 + blur(3px)。解决教训2 赌运气可读性。*/
@@ -66,17 +124,17 @@ h3 { margin: 0 0 var(--space-2) 0; font-size: var(--fs-md); font-weight: 600; }
 .link-btn { background: transparent; border: none; color: var(--accent); padding: 0 4px; margin: 0;
   font-size: var(--fs-sm); text-decoration: none; cursor: pointer; }
 .link-btn:hover { background: transparent; color: var(--accent-hover); text-decoration: underline; }
-button { background: rgba(255, 255, 255, 0.10); color: var(--text-primary);
+button { background: var(--btn-bg); color: var(--text-primary);
   border: 1px solid var(--glass-border); border-radius: var(--radius-control);
   padding: 6px 14px; font-size: var(--fs-sm); cursor: pointer; margin: 2px;
   transition: background 200ms ease, transform 200ms ease, border-color 200ms ease; }
-button:hover { background: rgba(255, 255, 255, 0.18); }
+button:hover { background: var(--btn-bg-hover); }
 button:active { transform: scale(0.97); }
 button:disabled { opacity: 0.35; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: transparent; color: #fff; }
 button.primary:hover { background: var(--accent-hover); }
 button.danger:hover { background: rgba(255, 69, 58, 0.25); border-color: var(--err); color: var(--err); }
-input, select { background: rgba(0, 0, 0, 0.3); color: var(--text-primary);
+input, select { background: var(--input-bg); color: var(--text-primary);
   border: 1px solid var(--glass-border); border-radius: var(--radius-control);
   padding: 4px 8px; font-size: var(--fs-sm); font-family: inherit; }
 input[type="number"] { width: 60px; }
@@ -87,7 +145,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .list-item { background: var(--glass-bg-elevated); border-radius: var(--radius-control);
   padding: 8px 12px; margin-bottom: 4px; display: flex; align-items: center; gap: var(--space-2);
   transition: background 150ms ease; }
-.list-item:hover { background: rgba(255, 255, 255, 0.22); }
+.list-item:hover { background: var(--list-hover); }
 .list-item:last-child { margin-bottom: 0; }
 .list-item.stale { color: var(--err); border-left: 3px solid var(--err); }
 .list-item .book-open { cursor: pointer; flex: 1; }
@@ -96,7 +154,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .list-item small { color: var(--text-secondary); display: block; font-size: var(--fs-xs);
   max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-del, .book-add { padding: 0 6px; margin: 0; font-size: var(--fs-sm); line-height: 18px;
-  background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); }
+  background: var(--btn-bg); border: 1px solid var(--glass-border); }
 .book-del:hover { background: rgba(255, 100, 100, 0.3); border-color: var(--err); }
 .book-add:hover { background: rgba(100, 200, 100, 0.3); border-color: var(--ok); }
 
@@ -127,22 +185,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 
 /* ---- Tab 栏（segmented control，spec §5） ---- */
-.tab-bar { display: flex; gap: 2px; background: rgba(0, 0, 0, 0.25);
+.tab-bar { display: flex; gap: 2px; background: var(--tabbar-bg);
   border-radius: var(--radius-control); padding: 3px; margin: 0 0 var(--space-3) 0; }
+/* 主题切换（跟随 ZCode / 固定浅色 / 固定深色，三态循环） */
+.theme-toggle { flex: 0 0 auto; background: transparent; border: none; margin: 0 2px 0 6px;
+  padding: 4px 6px; font-size: var(--fs-md); line-height: 1; opacity: 0.75; }
+.theme-toggle:hover { background: var(--tab-hover-bg); opacity: 1; }
 .tab { flex: 1; background: transparent; border: none; border-radius: 7px;
   padding: 5px 14px; margin: 0; color: var(--text-secondary);
   font-size: var(--fs-sm); font-weight: 500; cursor: pointer;
   transition: background 200ms ease, box-shadow 200ms ease, color 200ms ease; }
-.tab.active { background: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); color: var(--text-primary); font-weight: 600; }
-.tab:hover:not(.active) { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+.tab.active { background: var(--tab-active-bg);
+  box-shadow: var(--tab-active-shadow); color: var(--text-primary); font-weight: 600; }
+.tab:hover:not(.active) { color: var(--text-primary); background: var(--tab-hover-bg); }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 /* 控制中心宽度限制，居中（spec §2.3） */
 body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: border-box; }
 
 /* ---- 总览状态行项（spec §6） ---- */
-.status-row { padding: 10px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.status-row { padding: 10px 14px; border-bottom: 1px solid var(--hairline); }
 .status-row:first-child { padding-top: 4px; }
 .status-row:last-child { border-bottom: none; padding-bottom: 4px; }
 .status-main { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
@@ -198,20 +260,20 @@ body { max-width: 480px; margin: 0 auto; padding: var(--space-3); box-sizing: bo
 .hs-kv { font-size: var(--fs-sm); margin: 2px 0; color: var(--text-secondary); word-break: break-all; }
 .hs-kv b { color: var(--text-primary); font-weight: 500; }
 .hs-err { color: var(--err); font-size: var(--fs-sm); word-break: break-all; }
-.hs-details { border-top: 1px solid rgba(255, 255, 255, 0.08); padding: var(--space-2) 0; }
+.hs-details { border-top: 1px solid var(--hairline); padding: var(--space-2) 0; }
 .hs-details:first-of-type { border-top: none; }
 .hs-details summary { font-size: var(--fs-sm); font-weight: 600; cursor: pointer; color: var(--text-primary); }
 .hs-details summary:hover { color: var(--accent); }
 .hs-table { width: 100%; border-collapse: collapse; font-size: var(--fs-xs); margin-top: var(--space-1); }
 .hs-table th, .hs-table td { text-align: left; padding: 3px 8px 3px 0; vertical-align: top;
-  color: var(--text-primary); border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+  color: var(--text-primary); border-bottom: 1px solid var(--hairline); }
 .hs-table th { color: var(--text-secondary); font-weight: 500; }
 .hs-src { font-size: var(--fs-xs); color: var(--text-secondary); white-space: nowrap; }
 .hs-src-env { color: var(--warn); }
 .hs-src-file { color: var(--ok); }
 .hs-src-harness { color: var(--accent); }
 .hs-pre { font-family: Consolas, "Courier New", monospace; font-size: var(--fs-xs); white-space: pre-wrap;
-  word-break: break-all; max-height: 220px; overflow: auto; background: rgba(0, 0, 0, 0.3);
+  word-break: break-all; max-height: 220px; overflow: auto; background: var(--input-bg);
   border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-1) 0 0 0; }
 .hs-pre-log { max-height: 300px; }
 .hs-bank .hs-bank-toggle { cursor: pointer; flex: 1; }

@@ -757,6 +757,38 @@ brainstorm 过程中有两个误判被 `scripts/inspect-webview.cjs` 纠正：
 - 误判 B："reader 能透壁纸所以 webview 能透" → 错。reader 其实有自己的实色底（reader.css 主题色），
   没透。**真相**：页面自己写 `background:transparent` 就能透壁纸——控制中心的设计依据。
 
+### 浅/深主题跟随 + 无壁纸底色（2026-09）
+
+控制中心配色跟随 ZCode 主题（浅色 ZCode 不再浮深色玻璃；深色下整页深色底）。
+**主题信号只有一层**：webview 自己的 `matchMedia('(prefers-color-scheme: dark)')`
+（Electron nativeTheme）。真机实证（2026-09-14）：ZCode 切深色时它即时跟随；而
+ZCode 主页面 `<html>` 的 `theme-zai-light/dark` class **不跟随切换**（切深色后仍
+是 theme-zai-light、`--color-background` 仍 #f8f8f8）——曾按 class 做过 CDP 探测
+（status.zcode.theme），发现不可靠后已撤销（教训 21 再版：第一次探测时两个信号
+一致，把不可信的那个当成了权威）。优先级：localStorage 固定值（tab 栏 🌓 按钮
+三态循环 auto/light/dark）> matchMedia。index.html `<head>` 内联脚本首帧前按
+同信号设 `data-theme`（防闪烁），不需要 server 参与、不需要重启。
+
+CSS 全部颜色收进变量：`:root` = 深色默认（壁纸玻璃原样），`:root[data-theme="light"]`
+= 浅色玻璃（白底、深字、`--text-shadow: none`、语义色加深 `#248a3d`/`#b25000`/
+`#d70015` 保证浅底可读），`color-scheme` 同步切（原生控件跟随）。前端 lib 无写死
+颜色，改配色只动 control.css。
+
+**无壁纸底色（`body.no-wallpaper`，白底问题的修复）**：ZCode 的 `<webview>` 元素
+带内联白底（`browser-use-viewport` class，2026-09 ZCode 更新引入），压掉它的
+wallpaper.css 规则只在**壁纸注入时**才进页面——壁纸没注时控制页全透明 = 漏出
+大白底。修法：`index.html` 预置 `<body class="no-wallpaper">`，control.js 每次
+poll 按 `status.wallpaper.mode` 开关；`no-wallpaper` 时铺 `--page-bg` 实色
+（深 `#1c1c24` / 浅 `#f8f8f8`，浅色值是 ZCode 实测值），注了壁纸则移除 class 恢复
+A1 全透明（壁纸透出不受影响，见下）。server 端零改动，重载面板即生效。
+
+- 回归脚本 `scripts/verify-control-theme.cjs`（真机：重载控制页读 computed style，
+  断言主题变量 + no-wallpaper 底色；**webview 类 CDP target 只有面板开着才在
+  /json 里**，面板关着跑不了）；探测脚本 `scripts/inspect-control-theme.cjs`
+  （dump 主页面 + webview 两边主题信号）。
+- 真机观察（2026-09-14）：webview 类 CDP target 会从 `/json` 消失（面板关闭后
+  全部消失且当时未复现）——控制页的 CDP 验证必须面板开着跑。
+
 ### CDP target 过滤（spec §5.4）
 
 控制中心和 reader 自己跑在 ZCode webview 里，**它们也是 page target**。不过滤会：
