@@ -7,12 +7,16 @@ html, body { margin: 0; height: 100%; font-family: "Microsoft YaHei", "PingFang 
 body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 /* top bar */
-#topbar { flex: 0 0 44px; display: flex; align-items: center; gap: 8px;
-  padding: 0 10px; border-bottom: 1px solid var(--c-border);
+#topbar { flex: 0 0 36px; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px; border-bottom: 1px solid var(--c-border);
   background: var(--c-bg); color: var(--c-fg); font-size: 13px; }
 #topbar button, #topbar select { background: transparent; color: var(--c-fg);
-  border: 1px solid var(--c-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
-#title-bar { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  border: 1px solid var(--c-border); border-radius: 4px; padding: 1px 5px;
+  font-size: 12px; line-height: 18px; cursor: pointer; }
+#title-bar { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 书名限宽省略，保证尾部章节名完整可见 */
+#book-name { display: inline-block; max-width: 45%; overflow: hidden;
+  text-overflow: ellipsis; vertical-align: bottom; }
 .spacer { flex: 0 0 auto; }
 
 /* main: sidebar + reader */
