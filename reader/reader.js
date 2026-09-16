@@ -84,6 +84,12 @@
     var toc = await currentBook.getToc();
     // if volumes exist, group chapters under them; else flat
     if (toc.volumes.length > 0) {
+      // Chapters BEFORE the first volume's startChapterIndex belong to no
+      // volume — render them flat first, else they are dropped entirely
+      // (偷香高手: one marker-shaped author note became the only volume at
+      // idx 549 and the old loop rendered nothing before it).
+      var firstStart = toc.volumes[0].startChapterIndex || 0;
+      for (var fi = 0; fi < firstStart; fi++) addChapItem(box, fi, toc.chapters[fi].title);
       toc.volumes.forEach(function (v, vi) {
         var vd = document.createElement("div"); vd.className = "vol"; vd.textContent = v.title; box.appendChild(vd);
         var end = (toc.volumes[vi + 1] || { startChapterIndex: toc.chapters.length }).startChapterIndex;
