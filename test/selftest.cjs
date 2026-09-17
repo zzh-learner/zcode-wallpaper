@@ -56,6 +56,17 @@ function makeFakeDom() {
   };
 }
 
+// Local helper: self-contained copy of ui-tune's expression builder. Deliberately
+// NOT a require of lib/ui-tune.cjs — what these tests pin is how inject.cjs's
+// expressions MANAGE the tune element id, not ui-tune itself.
+function buildTuneExprForTest(styleId, css) {
+  return "(function(){var id=" + JSON.stringify(styleId) +
+    ";var old=document.getElementById(id);if(old)old.remove();" +
+    (css ? "var s=document.createElement('style');s.id=id;s.textContent=" + JSON.stringify(css) +
+      ";document.documentElement.appendChild(s);" : "") +
+    "return JSON.stringify({ok:true});})()";
+}
+
 let pass = 0,
   fail = 0;
 function check(name, cond) {
@@ -199,6 +210,54 @@ function check(name, cond) {
   check("video->image: style present (refreshed)", !!document.getElementById(STYLE_ID));
   // ...and the old <video> (carrying audio) is GONE. This is the fix.
   check("video->image: old <video> removed (no leftover audio)", !document.getElementById(VIDEO_EL_ID));
+}
+
+// --- Test 4f/4g/4h: 玻璃调节层 (zcode-user-ui-tune) 三路径管理 ---
+// 不变量(spec 2026-09-16 §3):任何注入/移除路径都必须管理 tune 层——
+// remove 清掉;inject/video 清掉旧的,配置非默认时再建新的。
+const TUNE_ID = "zcode-user-ui-tune";
+
+// 4f: --remove 清掉 tune 层
+{
+  const { document } = makeFakeDom();
+  const tuneFn = new Function("document", "return " + buildTuneExprForTest(TUNE_ID, "body{g:1}"));
+  tuneFn(document);
+  check("tune-remove pre: tune el exists", !!document.getElementById(TUNE_ID));
+  const rem = new Function("document", "return " + buildExpression("remove", "", null));
+  rem(document);
+  check("remove: tune layer gone", !document.getElementById(TUNE_ID));
+  check("remove: style+video also gone", !document.getElementById(STYLE_ID) && !document.getElementById(VIDEO_EL_ID));
+}
+
+// 4g: inject 不带 tuneCss -> 清掉残留 tune 层,不重建(配置为默认)
+{
+  const { document } = makeFakeDom();
+  const tuneFn = new Function("document", "return " + buildTuneExprForTest(TUNE_ID, "body{old:1}"));
+  tuneFn(document);
+  const imgFn = new Function("document", "return " + buildExpression("inject", "body{bg:url(x.jpg)}", null));
+  imgFn(document);
+  check("inject-no-tune: stale tune layer cleared", !document.getElementById(TUNE_ID));
+  check("inject-no-tune: wallpaper style present", !!document.getElementById(STYLE_ID));
+}
+
+// 4h: inject 带 tuneCss -> 清旧建新
+{
+  const { document } = makeFakeDom();
+  const tuneFn = new Function("document", "return " + buildTuneExprForTest(TUNE_ID, "body{old:1}"));
+  tuneFn(document);
+  const imgFn = new Function("document", "return " + buildExpression("inject", "body{bg:url(x.jpg)}", "aside[data-testid=x]{background:rgba(0,0,0,.5)}"));
+  imgFn(document);
+  const tuneEl = document.getElementById(TUNE_ID);
+  check("inject-with-tune: tune layer rebuilt", !!tuneEl);
+  check("inject-with-tune: new css applied", tuneEl && tuneEl.textContent === "aside[data-testid=x]{background:rgba(0,0,0,.5)}");
+}
+
+// 4i: video 注入带 tuneCss -> 同样重建
+{
+  const { document } = makeFakeDom();
+  const vidFn = new Function("document", "return " + buildVideoExpression("body{a:1}", "file:///x/v.mp4", "aside[data-testid=x]{g:1}"));
+  vidFn(document);
+  check("video-with-tune: tune layer present", !!document.getElementById(TUNE_ID));
 }
 
 // --- Test 5: inject.cjs pure functions (toFileUrl / listWallpapers / listVideos / pickRandom / encodeFileUrl) ---

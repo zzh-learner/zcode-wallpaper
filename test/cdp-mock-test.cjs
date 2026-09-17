@@ -171,6 +171,14 @@ mockHttp.listen(9998, "127.0.0.1", async () => {
     lastExpression.indexOf("createElement('video')") === -1
   );
 
+  // 6. Glass-tune layer: inject expressions must MANAGE the tune el
+  //    (clear-then-maybe-recreate). Mock captures only the main expression;
+  //    assert it references the tune id (cleanup discipline, spec 2026-09-16).
+  check(
+    "image inject expression references glass-tune id",
+    lastExpression.indexOf("zcode-user-ui-tune") !== -1
+  );
+
   console.log("\n[mock] " + pass + " passed, " + fail + " failed.");
   console.log("[mock] an inject was received:", !!lastInjectedCss);
   console.log("[mock] remove was exercised:", removeCalled);

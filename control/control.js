@@ -99,6 +99,9 @@
       // 全透明（A1：壁纸从底层透出，压制 webview 白底靠 wallpaper.css）。
       var hasWallpaper = !!(st.wallpaper && st.wallpaper.mode !== "none");
       document.body.classList.toggle("no-wallpaper", !hasWallpaper);
+      // 玻璃调节提示:壁纸没注时玻璃效果不可见(配置照存)
+      var glassHint = document.getElementById("glass-nowp-hint");
+      if (glassHint) glassHint.style.display = hasWallpaper ? "none" : "block";
       var cdpOk = !!(st.zcode && st.zcode.running);
       // webview _blank fix availability hint (spec §7 已知遗留):
       // blankfix needs debug port. When port closed (cdpOk=false), warn user
@@ -235,6 +238,103 @@
       if (found) { window.__ccShelf.addToShelf(found); renderShelf(); }
     }
   });
+
+  // ---- 玻璃调节 (ui-tune, spec 2026-09-16) ----
+  // 滑块 input -> 300ms 防抖 -> POST /api/uitune(整份配置,最后一次为准)。
+  // 回填只在启动时做一次:poll 每 2s 跑,不能覆盖用户正在拖的滑块。
+  var GLASS_REGIONS = [
+    { key: "sidebar", name: "侧边栏" },
+    { key: "chat", name: "主对话区" },
+    { key: "input", name: "输入框" },
+    { key: "topbar", name: "顶栏" },
+    { key: "panel", name: "面板" }
+  ];
+  function renderGlassRows() {
+    var host = document.getElementById("glass-rows");
+    if (!host) return;
+    var html = "";
+    GLASS_REGIONS.forEach(function (r) {
+      html += '<div class="glass-row" data-region="' + r.key + '">' +
+        '<span class="glass-name">' + r.name + '</span>' +
+        '<label>不透明 <input type="range" min="0" max="100" value="0" data-glass="alpha"><span class="glass-val">0</span></label>' +
+        '<label>模糊 <input type="range" min="0" max="24" value="0" data-glass="blur"><span class="glass-val">0</span></label>' +
+        '</div>';
+    });
+    host.innerHTML = html;
+  }
+  function glassRowEl(key) {
+    return document.querySelector('.glass-row[data-region="' + key + '"]');
+  }
+  function setGlassInput(row, prop, v) {
+    var inp = row.querySelector('input[data-glass="' + prop + '"]');
+    if (!inp) return;
+    inp.value = v;
+    if (inp.nextElementSibling) inp.nextElementSibling.textContent = String(v);
+  }
+  function fillGlassRows(config) {
+    GLASS_REGIONS.forEach(function (r) {
+      var row = glassRowEl(r.key);
+      if (!row) return;
+      var reg = (config && config.regions && config.regions[r.key]) || { alpha: 0, blur: 0 };
+      setGlassInput(row, "alpha", reg.alpha || 0);
+      setGlassInput(row, "blur", reg.blur || 0);
+    });
+  }
+  function collectGlassConfig() {
+    var regions = {};
+    GLASS_REGIONS.forEach(function (r) {
+      var row = glassRowEl(r.key);
+      var a = row ? row.querySelector('input[data-glass="alpha"]') : null;
+      var b = row ? row.querySelector('input[data-glass="blur"]') : null;
+      regions[r.key] = { alpha: a ? (parseInt(a.value, 10) || 0) : 0, blur: b ? (parseInt(b.value, 10) || 0) : 0 };
+    });
+    return { version: 1, regions: regions };
+  }
+  var glassMsgTimer = null;
+  function setGlassMsg(text, isErr) {
+    var el = document.getElementById("glass-msg");
+    if (!el) return;
+    el.textContent = text;
+    el.className = "toast-inline" + (isErr ? " err" : " ok");
+    if (glassMsgTimer) { clearTimeout(glassMsgTimer); glassMsgTimer = null; }
+    glassMsgTimer = setTimeout(function () { el.textContent = ""; el.className = "toast-inline"; glassMsgTimer = null; }, 2500);
+  }
+  function saveGlassConfig() {
+    fetch("/api/uitune", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectGlassConfig()) })
+      .then(function (r) {
+        if (!r.ok) { setGlassMsg("保存失败 — 请先用 start.vbs 重启控制中心服务", true); return null; }
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j) return; // r.ok 守卫已提示过
+        if (j.applied) setGlassMsg("已应用（" + j.affected + "/" + j.total + " 窗口）", false);
+        else setGlassMsg("已保存，未连接 ZCode — 下次注入壁纸时生效", true);
+      })
+      .catch(function () { /* server down; next input retries */ });
+  }
+  var glassSaveTimer = null;
+  var glassRowsEl = document.getElementById("glass-rows");
+  if (glassRowsEl) glassRowsEl.addEventListener("input", function (e) {
+    var inp = e.target;
+    if (!inp.getAttribute || !inp.getAttribute("data-glass")) return;
+    if (inp.nextElementSibling) inp.nextElementSibling.textContent = inp.value;
+    if (glassSaveTimer) clearTimeout(glassSaveTimer);
+    glassSaveTimer = setTimeout(saveGlassConfig, 300);
+  });
+  var glassResetBtn = document.getElementById("glass-reset");
+  if (glassResetBtn) glassResetBtn.addEventListener("click", function () {
+    GLASS_REGIONS.forEach(function (r) {
+      var row = glassRowEl(r.key);
+      if (!row) return;
+      setGlassInput(row, "alpha", 0);
+      setGlassInput(row, "blur", 0);
+    });
+    saveGlassConfig();
+  });
+  renderGlassRows();
+  fetch("/api/uitune").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (cfg) { if (cfg) fillGlassRows(cfg.config); }).catch(function () {});
 
   // ---- bookmark panel (spec §6) ----
   function renderBookmarks() {

@@ -16,7 +16,7 @@
 
 | 用途 | 命令 |
 | --- | --- |
-| 跑全量测试（30 个 test 文件，顺序串行） | `npm test` |
+| 跑全量测试（32 个 test 文件，顺序串行） | `npm test` |
 | 注入图片壁纸（独立跑，需 ZCode 已带 9222 端口） | `npm run inject` |
 | 注入视频壁纸 | `npm run inject:video` |
 | 移除注入 | `npm run remove` |
@@ -1479,9 +1479,68 @@ server 重启丢 handle 时，`stopRotateNow()` 走 pid kill 兜底（spec §8 �
 
 ---
 
+## 玻璃调节（按区域透明度/模糊度）
+
+壁纸子系统的增量能力：对 ZCode 主页面**五个区域**（侧边栏/主对话区/输入框/顶栏/面板）分别调
+不透明度（0-100%）+ 模糊度（0-24px backdrop-filter），把"全透明模式"升级成可调毛玻璃。
+住在控制中心「壁纸」tab 的「玻璃调节」组。spec/plan 见 `docs/superpowers/` 下
+`2026-09-16-ui-glass-tune-*`。
+
+### 机制：独立第二层 style，原地更新，绝不重注入
+
+`<style id="zcode-user-ui-tune">` 与壁纸层完全独立，**wallpaper.css 一个字不动**。调参 =
+CDP `Runtime.evaluate` 原地删旧建新该层。**禁止走重注入调参**——重跑 inject 会换随机壁纸。
+某区域全 0 → 跳过规则；全区域全 0 → 整层移除 = 和现状完全一致（默认零影响）。
+三个管理点（对齐"三个清理点一个目标"）：`--remove` 清层；图/视频注入清旧层并按
+`ui-tune.json` 重建（重启后效果保持）——实现在 `inject.cjs` 的 `tuneStep()`（buildExpression/
+buildVideoExpression 的可选第三参，向后兼容）。
+
+### 组件与单一权威
+
+- `lib/ui-tune.cjs` —— 写模块（对齐 video-mute 范式，复用 cdp.cjs 中性工具）：
+  纯函数 `normalizeConfig`（version!==1/坏值→全 0，clamp 永不抛）/`buildTuneStyle`（→CSS|null）/
+  `buildTuneExpression`/`readConfigFile` + `applyTune`（遍历 `cdp.listTargets()`——已过滤工具页，
+  玻璃层绝不进控制/阅读器页）。**持久状态唯一权威 = 根目录 `ui-tune.json`**（gitignored，
+  version:1；半写靠 .tmp+rename 原子写）；server GET/POST 与 inject 重建三处读取共用
+  `readConfigFile`，不设内存副本。
+- `lib/control-server.cjs` —— `GET/POST /api/uitune`（即时面对齐 muteVideo，无 jobId/锁；
+  CDP 不通→`saved:true, applied:false` 不 500）。**`opts.applyTune` 是测试注入点**：
+  测试必须传 stub，绝不让测试真调 applyTune——本机 9222 有活 ZCode，真调会把玻璃注进
+  用户正在用的页面（预检抓出的缺陷）。
+- `control/` —— 滑块行 4+1，input 防抖 300ms 整份 POST；**回填只在启动做一次**（2s poll
+  不得覆盖正在拖的滑块）；`saveGlassConfig`/启动 GET 都有 **r.ok 守卫**——旧 server 对
+  新路由 404 时提示"请用 start.vbs 重启"，不假报"已保存"（终审抓出的必修项）。
+
+### 五区域锚点（真机钉死，绑定 ZCode 3.12.1；更新后用 `scripts/inspect-regions.cjs` 复测）
+
+| region | 选择器 | 坑 |
+| --- | --- | --- |
+| sidebar | `aside[data-testid="sidebar"]` | 核心教训 2 的"硬画实色"**在本版已不复现**（1025 后代全扫描零实色，版本绑定结论，别当永久事实） |
+| chat | `[data-testid="conversation-column"]` | 外层（含 conversation，rect 相同） |
+| input | `[data-testid="conversation-bottom-dock-transition"] .bg-input` | **必须 scoped**：裸 `.bg-input` 全页命中 3-5 个漂移元素（顶栏按钮/右面板输入框） |
+| topbar | `[data-testid="workspace-header"]` | — |
+| panel | `[data-testid="browser"]` | 右侧面板整块（含地址栏行）；验收期补加。多会话多实例全命中，隐藏实例零面积无副作用（教训 34 拓扑） |
+
+### 双主题色调 + 已知限制
+
+玻璃 tint 按 `<html>` 的 `theme-zai-*` class 分发两套：深烟灰 rgba(24,24,28,α) / 浅白霜
+rgba(248,248,248,α)，与 wallpaper.css 同信号源。已知该 class **不实时跟随切主题**（见控制中心
+主题跟随章节），切主题后色调滞后，重注壁纸刷新。浅色主题白霜叠白壁纸对比弱——靠用户调滑块，
+不是 bug。弹窗/对话框刻意不做（强对比可读性风险）；控制中心/阅读器 webview 内部不归它管。
+
+### 测试
+
+`test/uitunetest.cjs`（纯函数 41 断言）、`controlservertest` 的 /api/uitune 组（stub 两段式：
+首次 reject 验降级、二次 resolve 验字段映射）、`selftest` Test 4f-4i + `cdp-mock-test` 第 6 步
+（三路径管理 tune 层，字面量 `zcode-user-ui-tune` 防漂移）。E2E：`scripts/e2e-uitune.cjs`
+（**副作用警示**：会真写 `ui-tune.json` 并对活 ZCode 原地建/删玻璃层，跑完把配置改成全 0 再
+恢复）。
+
+---
+
 ## 测试
 
-`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → bookmarktest → webviewblankfixtest → sidebarentrytest → epubtest → epubloadtest → epubservertest → scope-csstest → hindsighttest → hindsightviewtest。
+`npm test` 跑：selftest → cdp-mock-test → cdp-retry-test → cdptest → setuptest → resizetest → probetest → menutest → transparenttest → readertoctest → readercodetest → readercodetestweb → readertocwebtest → readerprogresstest → readerservertest → bookroutertest → rotatetest → statustest → controlservertest → statusviewtest → shelftest → videomutetest → uitunetest → bookmarktest → webviewblankfixtest → sidebarentrytest → epubtest → epubloadtest → epubservertest → scope-csstest → hindsighttest → hindsightviewtest。
 改任何 `.cjs` 或 `.bat` 逻辑前先确保这堆绿的。
 
 `rotatetest.cjs` 测 `lib/rotate.cjs` 的纯函数：`pickRandomExcluding`（空池/单元素/排除上次/

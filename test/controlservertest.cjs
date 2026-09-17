@@ -23,7 +23,14 @@ function httpReq(method, url, body) {
   const { createServer } = require("../lib/control-server.cjs");
   const picker = require("net").createServer(); await new Promise(r => picker.listen(0, "127.0.0.1", r));
   const port = picker.address().port; await new Promise(r => picker.close(r));
-  const srv = await createServer({ root, port, host: "127.0.0.1" });
+  // applyTune stub (预检裁决): 第一次 reject(降级分支), 第二次 resolve(字段映射)
+  let applyCalls = 0;
+  const srv = await createServer({ root, port, host: "127.0.0.1",
+    applyTune: function () {
+      applyCalls++;
+      if (applyCalls === 1) return Promise.reject(new Error("no cdp in test"));
+      return Promise.resolve({ affected: 2, total: 3 });
+    } });
   const base = "http://127.0.0.1:" + srv.port;
   try {
     // /control (no slash) -> 302 /control/ (教训 18a)
@@ -146,6 +153,37 @@ function httpReq(method, url, body) {
 
     const hs404 = await httpReq("GET", base + "/api/hindsight/nope");
     check("/api/hindsight/nope -> 404", hs404.status === 404);
+
+    // ---- /api/uitune (玻璃调节, spec 2026-09-16 §7 第二层) ----
+    const tunePath = path.join(root, "ui-tune.json");
+    const g0 = await httpReq("GET", base + "/api/uitune");
+    check("uitune GET: 200 default", g0.status === 200);
+    const g0j = JSON.parse(g0.body);
+    check("uitune GET: no file -> isDefault true", g0j.isDefault === true && g0j.config.version === 1);
+    check("uitune GET: all regions zero",
+      ["sidebar", "chat", "input", "topbar", "panel"].every(function (k) {
+        return g0j.config.regions[k].alpha === 0 && g0j.config.regions[k].blur === 0;
+      }));
+    const p1 = await httpReq("POST", base + "/api/uitune",
+      JSON.stringify({ version: 1, regions: { sidebar: { alpha: 55, blur: 12 } } }));
+    check("uitune POST: 200 saved", p1.status === 200);
+    const p1j = JSON.parse(p1.body);
+    check("uitune POST: saved true + isDefault false", p1j.saved === true && p1j.isDefault === false);
+    check("uitune POST: applyTune reject -> applied:false + reason (降级分支)", p1j.applied === false && typeof p1j.reason === "string");
+    check("uitune POST: file written to disk", fs.existsSync(tunePath));
+    const onDisk = JSON.parse(fs.readFileSync(tunePath, "utf8"));
+    check("uitune POST: disk content correct", onDisk.regions.sidebar.alpha === 55 && onDisk.regions.sidebar.blur === 12);
+    const g1 = await httpReq("GET", base + "/api/uitune");
+    check("uitune GET after POST: round-trip", JSON.parse(g1.body).config.regions.sidebar.alpha === 55);
+    const p2 = await httpReq("POST", base + "/api/uitune",
+      JSON.stringify({ version: 1, regions: { sidebar: { alpha: 999, blur: -3 } } }));
+    const p2j = JSON.parse(p2.body);
+    const onDisk2 = JSON.parse(fs.readFileSync(tunePath, "utf8"));
+    check("uitune POST: clamp on write (999->100, -3->0)", p2.status === 200 &&
+      onDisk2.regions.sidebar.alpha === 100 && onDisk2.regions.sidebar.blur === 0);
+    check("uitune POST: applyTune resolve -> applied:true + affected/total 映射", p2j.applied === true && p2j.affected === 2 && p2j.total === 3);
+    const p3 = await httpReq("POST", base + "/api/uitune", "not json{");
+    check("uitune POST: bad json -> 400 (不触 applyTune)", p3.status === 400);
 
     // cleanup any .rotate.json the test wrote into tmp root
     try { require("fs").unlinkSync(path.join(root, ".rotate.json")); } catch (e) {}
